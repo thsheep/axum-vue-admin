@@ -28,44 +28,45 @@
 
 ### 在线预览
 - 待部署
-- username: admin
-- password: 123456
+- username：superadmin / useradmin / policiadmin
+- password：Qjv+L5NX#tF-
+
 
 ### 登录页
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/login.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/login.png)
 ### 工作台
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/workbench.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/workbench.png)
 
 ### 用户管理
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/user.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/user.png)
 
 ### 用户组管理
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/user_group.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/user_group.png)
 
 ### 角色管理
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/role.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/role.png)
 
 ### Cedar Policy管理
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/cedar_policy.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/cedar_policy.png)
 
 ### Cedar Schema管理
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/cedar_schema.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/cedar_schema.png)
 
 
 ### 忘记密码
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/forgot_password.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/forgot_password.png)
 
 ### 重置密码
 
-![image](https://github.com/thsheep/axum-vue-admin/blob/main/screenshot/reset_password.png)
+![image](https://github.com/thsheep/axum-vue-admin/blob/master/screenshot/reset_password.png)
 
 
 ### 快速开始
