@@ -1,0 +1,40 @@
+use crate::schemas::user::{DeptResponse, GroupResponse};
+use chrono::NaiveDateTime;
+use sea_orm::FromQueryResult;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use utoipa::ToSchema;
+
+// 定义数据库行的结构体
+#[derive(Debug, Deserialize, Serialize, FromQueryResult)]
+pub struct PolicyInfoDbRow {
+    pub resource_pattern: String,
+    pub required_permission_slug: String,
+}
+
+// 定义策略信息的结构体
+
+// 定义UI策略的类型别名，便于理解
+pub type UiPolicies = HashSet<String>;
+
+
+#[derive(Default, Debug, Serialize, Deserialize, ToSchema, FromQueryResult)]
+pub struct Info {
+    pub user_id: i32,
+    pub username: String,
+    pub alias: Option<String>,
+    pub email: String,
+    pub phone: Option<String>,
+    pub is_active: bool,
+    pub avatar: Option<String>,
+    pub last_login: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct Profile {
+    pub ui_policies: UiPolicies,
+    pub roles: Vec<String>,
+    pub info: Info,
+    pub departments: Option<DeptResponse>,
+    pub groups: Vec<GroupResponse>,
+}

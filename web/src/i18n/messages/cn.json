@@ -1,0 +1,81 @@
+{
+  "lang": "中文",
+  "app_name": "Axum Vue Admin",
+  "header": {
+    "label_profile": "个人信息",
+    "label_logout": "退出登录",
+    "label_logout_dialog_title": "提示",
+    "text_logout_confirm": "确认退出？",
+    "text_logout_success": "已退出登录"
+  },
+  "views": {
+    "login": {
+      "text_login": "登录",
+      "message_input_username_password": "请输入用户名和密码",
+      "message_verifying": "正在验证...",
+      "message_login_success": "登录成功",
+      "forget_password": "忘记密码",
+      "invalidUsername": "用户名不存在",
+      "incorrectPassword": "密码错误",
+      "userHasDisabled": "用户已禁用"
+    },
+    "forget_password": {
+      "forget_password": "忘记密码",
+      "send_password_reset_email": "发送密码重置邮件",
+      "message_forget_password_success": "密码重置邮件已发送",
+      "sendEmailSuccess": "检查您的电子邮件以获取有关如何重置密码的说明",
+      "notFound": "邮件地址不存在"
+    },
+    "resetPassword": {
+      "resetPassword": "重置密码",
+      "resetSuccessful": "密码重置成功",
+      "tokenNotFound": "链接已失效"
+    },
+    "workbench": {
+      "label_workbench": "工作台",
+      "text_hello": "hello, {username}",
+      "text_welcome": "今天又是元气满满的一天!",
+      "label_number_of_items": "项目数",
+      "label_upcoming": "待办",
+      "label_information": "消息",
+      "label_project": "项目",
+      "label_more": "更多"
+    },
+    "profile": {
+      "label_profile": "个人中心",
+      "label_modify_information": "修改信息",
+      "label_change_password": "修改密码",
+      "label_avatar": "头像",
+      "label_username": "用户姓名",
+      "label_email": "邮箱",
+      "label_old_password": "旧密码",
+      "label_new_password": "新密码",
+      "label_confirm_password": "确认密码",
+      "placeholder_username": "请填写姓名",
+      "placeholder_email": "请填写邮箱",
+      "placeholder_old_password": "请输入旧密码",
+      "placeholder_new_password": "请输入新密码",
+      "placeholder_confirm_password": "请再次输入新密码",
+      "message_username_required": "请输入昵称",
+      "message_old_password_required": "请输入旧密码",
+      "message_new_password_required": "请输入新密码",
+      "message_password_confirmation_required": "请再次输入密码",
+      "message_password_confirmation_diff": "两次密码输入不一致"
+    },
+    "errors": {
+      "label_error": "错误页",
+      "text_back_to_home": "返回首页"
+    }
+  },
+  "common": {
+    "text": {
+      "severError": "500 服务器错误",
+      "update_success": "修改成功",
+      "pagination": "共 {itemCount} 条"
+    },
+    "buttons": {
+      "update": "修改",
+      "reset": "重置"
+    }
+  }
+}

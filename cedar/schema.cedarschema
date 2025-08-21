@@ -1,0 +1,187 @@
+// 没有多租户的需求不设置命名空间
+
+// 定义别名组合
+
+
+// -------------------------------------------------
+// 1. 定义核心实体类型
+// -------------------------------------------------
+
+// 应用程序实体（全局权限检查）
+entity Application;
+
+// 用户 (User) 实体。
+// 这是我们系统中的主体（Principal）。
+// 一个用户可以是多个角色的成员。"用户-角色"(临时附加) "用户-用户组-角色"(常规情况)。
+
+entity User in [Role, Department, Group] = {
+    name: String
+};
+
+
+// 角色 (Role) 实体。
+entity Role = {
+    name: String
+};
+
+// 用户组
+entity Group = {
+    name: String
+};
+// 部门
+entity Department = {
+    name: String
+};
+
+// Cedar Policy
+entity Policy = {
+    name: String
+};
+
+
+
+// 资源 (Resource) 实体。
+// 这是被保护的对象，例如一篇文章、一个文件或一个API端点。
+// 如果需要增加灵活性，资源可以被分组到“资源组”中。
+
+
+
+// -------------------------------------------------
+// 2. 定义操作 (Actions)
+// -------------------------------------------------
+
+
+// 定义CRUD操作。
+// appliesTo 部分将这些操作与我们的核心实体关联起来。
+// 主体 (principal) 通常是用户。
+// 资源 (resource) 就是被保护的Resource。
+// 用户
+
+action "ViewUser" appliesTo {
+    principal: User,
+    resource: User
+};
+
+action "CreateUser" appliesTo {
+    principal: User,
+    resource: User
+};
+
+action "UpdateUser" appliesTo {
+    principal: User,
+    resource: User
+};
+
+action "DeleteUser" appliesTo {
+    principal: User,
+    resource: User
+};
+
+// 用户组
+
+action "ViewGroup" appliesTo {
+    principal: User,
+    resource: Group
+};
+
+action "ViewGroupUsers" appliesTo {
+    principal: User,
+    resource: Group
+};
+
+action "CreateGroup" appliesTo {
+    principal: User,
+    resource: Group
+};
+
+action "UpdateGroup" appliesTo {
+    principal: User,
+    resource: Group
+};
+
+action "DeleteGroup" appliesTo {
+    principal: User,
+    resource: Group
+};
+
+
+// 角色
+
+action "ViewRole" appliesTo {
+    principal: User,
+    resource: Role
+};
+
+action "CreateRole" appliesTo {
+    principal: User,
+    resource: Role
+};
+
+action "UpdateRole" appliesTo {
+    principal: User,
+    resource: Role
+};
+
+action "DeleteRole" appliesTo {
+    principal: User,
+    resource: Role
+};
+
+action "AssignRole" appliesTo {
+    principal: User,
+    resource: Role
+};
+
+action "RevokeRole" appliesTo {
+    principal: User,
+    resource: Role
+};
+
+// 部门
+
+action "ViewDepartment" appliesTo {
+    principal: User,
+    resource: Department
+};
+
+action "ViewDepartmentUsers" appliesTo {
+    principal: User,
+    resource: Department
+};
+
+action "CreateDepartment" appliesTo {
+    principal: User,
+    resource: Department
+};
+
+action "UpdateDepartment" appliesTo {
+    principal: User,
+    resource: Department
+};
+
+action "DeleteDepartment" appliesTo {
+    principal: User,
+    resource: Department
+};
+
+// 策略
+
+action "ViewPolicy" appliesTo {
+    principal: User,
+    resource: Policy
+};
+
+action "CreatePolicy" appliesTo {
+    principal: User,
+    resource: Policy
+};
+
+action "UpdatePolicy" appliesTo {
+    principal: User,
+    resource: Policy
+};
+
+action "DeletePolicy" appliesTo {
+    principal: User,
+    resource: Policy
+};
