@@ -1,9 +1,3 @@
-<p align="center">
-  <a href="https://github.com/mizhexiaoxiao/vue-fastapi-admin">
-    <img alt="Axum Vue Admin Logo" width="200" src="https://github.com/mizhexiaoxiao/vue-fastapi-admin/blob/main/deploy/sample-picture/logo.svg">
-  </a>
-</p>
-
 <h1 align="center">Axum Vue Admin</h1>
 
 [English](./README-en.md) | 简体中文
