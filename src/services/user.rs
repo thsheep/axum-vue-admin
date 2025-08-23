@@ -12,7 +12,15 @@ use crate::schemas::user::{
 use crate::services::department::DepartmentService;
 use crate::services::groups::GroupService;
 use crate::services::role::RoleService;
-use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType};
+use crate::utils::cedar_utils::{
+    entities2json, 
+    AuthAction, 
+    ResourceType,
+    ENTITY_ATTR_NAME,
+    ENTITY_TYPE_ROLE,
+    ENTITY_TYPE_GROUP,
+    ENTITY_TYPE_USER
+};
 use crate::utils::crypto::hash_password;
 use crate::{conflict, not_found};
 use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression};
@@ -26,12 +34,8 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tracing::debug;
 
-const ENTITY_TYPE_USER: &str = "User";
-const ENTITY_TYPE_GROUP: &str = "Group";
-const ENTITY_TYPE_ROLE: &str = "Role";
-const ENTITY_ATTR_NAME: &str = "name";
-const ROLE_SOURCE_DIRECT: &str = "direct";
-const ROLE_SOURCE_GROUP: &str = "group";
+const   ROLE_SOURCE_DIRECT: &str = "direct";
+const   ROLE_SOURCE_GROUP: &str = "group";
 
 #[derive(Clone)]
 pub struct UserService {

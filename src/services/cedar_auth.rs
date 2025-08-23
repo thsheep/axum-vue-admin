@@ -1,15 +1,13 @@
-use std::collections::HashSet;
 use crate::errors::app_error::AppError;
 use crate::services::cache::CacheService;
-use cedar_policy::{Authorizer, Decision, Entities, Entity, PolicySet, Request, Schema};
+use cedar_policy::{Authorizer, Decision, Entities, PolicySet, Request, Schema};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::{to_string_pretty, Value as JsonValue};
 use tracing::{info, warn, instrument, debug, error};
 use crate::forbidden;
 use crate::schemas::auth::CurrentUser;
 use crate::schemas::cedar_policy::CedarContext;
-use crate::utils::cedar_utils::{AuthAction, AuthorizationBuilder, ResourceType};
+use crate::utils::cedar_utils::{AuthAction, AuthorizationBuilder, ResourceType, USER_ENTITIES_CACHE_PREFIX};
 
 pub struct AuthContextInner {
     pub policies: PolicySet,
@@ -81,9 +79,11 @@ impl CedarAuthService {
         resource_entities: Entities,
     ) -> Result<bool, AppError> {
         // 从缓存获取用户实体
+        let cache_key = format!("{}:{}", USER_ENTITIES_CACHE_PREFIX, current_user.user_id);
+
         let user_entities = self
             .cache_service
-            .get_user_entities(current_user.user_id)
+            .get_entities(cache_key)
             .await?
             .ok_or_else(||forbidden!(format!("User[{}] Entities Not Found", current_user.username)))?;
 

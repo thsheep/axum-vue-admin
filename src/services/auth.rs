@@ -1,13 +1,7 @@
-use axum_extra::extract::{cookie::{Cookie, CookieJar}};
-use axum_extra::headers::Authorization;
-use axum_extra::headers::authorization::Bearer;
-use chrono::{Duration, Utc};
-use cookie::{SameSite, time::Duration as CookieDuration};
-use redis::{AsyncCommands, RedisResult};
-use sea_orm::JoinType::InnerJoin;
-use sea_orm::{ActiveModelTrait, ColIdx, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait, QueryFilter, QuerySelect, QueryTrait, RelationTrait, Set};
-use tracing::debug;
+use crate::config::app::BLACK_LIST_JTI;
 use crate::config::auth::{ACCESS_TOKEN_EXPIRATION, REFRESH_TOKEN_EXPIRATION};
+// 认证相关路由（登录、SSO等）
+use crate::config::state::AppState;
 use crate::entity::{
     roles::{Column as RoleColumn, Entity as RoleEntity, Relation as RoleRelation},
     user_roles::Column as UserRoleColumn,
@@ -15,13 +9,21 @@ use crate::entity::{
 };
 use crate::errors::app_error::AppError;
 use crate::schemas::auth::{AuthResponse, Claims, Credentials, TokenType};
-use crate::utils::crypto::verify_password;
-use crate::utils::jwt::{create_access_token, decode_token};
-// 认证相关路由（登录、SSO等）
-use crate::config::state::AppState;
-use crate::config::app::BLACK_LIST_JTI;
 use crate::services::user::UserService;
+use crate::utils::{
+    jwt::{create_access_token, decode_token},
+    crypto::verify_password,
+    cedar_utils::USER_ENTITIES_CACHE_PREFIX
+};
 use crate::{not_found, unauthorized};
+use axum_extra::extract::cookie::{Cookie, CookieJar};
+use axum_extra::headers::authorization::Bearer;
+use axum_extra::headers::Authorization;
+use chrono::{Duration, Utc};
+use cookie::{time::Duration as CookieDuration, SameSite};
+use redis::{AsyncCommands, RedisResult};
+use sea_orm::JoinType::InnerJoin;
+use sea_orm::{ActiveModelTrait, ColIdx, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait, QueryFilter, QuerySelect, QueryTrait, RelationTrait, Set};
 
 #[derive(Clone)]
 pub struct AuthService {
@@ -238,10 +240,14 @@ impl AuthService {
         Ok(jar.remove(Cookie::from("refresh_token")))
     }
 
+    // 当前用户的 Entities 不应该过期; 不然速度太慢了.
     async fn cache_user_entities(&self, user_id: i32) -> Result<(), AppError> {
-
+        let cache_key = format!("{}:{}", USER_ENTITIES_CACHE_PREFIX, user_id);
         let user_entities = self.user_service.get_user_entities(user_id).await?;
-        self.app_state.cache_user_entities(user_id, user_entities).await?;
+        self.app_state
+            .cache_service
+            .cache_entities(cache_key, user_entities, None)
+            .await?;
 
         Ok(())
     }

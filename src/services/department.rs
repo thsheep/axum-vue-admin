@@ -13,15 +13,13 @@ use crate::schemas::auth::CurrentUser;
 use crate::schemas::cedar_policy::CedarContext;
 use crate::schemas::department::{CreateDepartmentDto, DepartmentResponse, DeptTreeNode};
 use crate::schemas::user::UserResponse;
-use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType};
+use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType, ENTITY_TYPE_DEPARTMENT};
 use crate::utils::services::{assemble_user_info, build_dept_tree};
 use sea_orm::ActiveValue::Set;
 use sea_orm::JoinType::InnerJoin;
 use tracing::debug;
-use url::quirks::username;
 
 const MAX_DEPT_DEPTH: usize = 100;
-const CEDAR_ENTITY_TYPE_DEPARTMENT: &str = "Department";
 const ROOT_DEPARTMENT_ID: i32 = 0;
 
 #[derive(Clone)]
@@ -390,7 +388,7 @@ impl DepartmentService {
         dept: &departments::Model,
     ) -> Result<Entity, AppError> {
         let dept_eid = EntityId::from_str(&dept.dept_id.to_string())?;
-        let dept_typename = EntityTypeName::from_str(CEDAR_ENTITY_TYPE_DEPARTMENT)?;
+        let dept_typename = EntityTypeName::from_str(ENTITY_TYPE_DEPARTMENT)?;
         let dept_e_uid = EntityUid::from_type_name_and_id(dept_typename, dept_eid);
 
         let mut attrs = HashMap::new();

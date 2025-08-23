@@ -7,8 +7,26 @@ use std::str::FromStr;
 use tracing::log::debug;
 use crate::forbidden;
 
+// Entities 缓存用的key前缀
 
-static APPLICATION_ENTITY_UID: &str = r#"Application::"VueAxumAdmin""#;
+pub const USER_ENTITIES_CACHE_PREFIX: &str = "user_entities";
+
+
+// Cedar 使用的常量
+const  APPLICATION_ENTITY_UID: &str = r#"Application::"VueAxumAdmin""#;
+pub const  ENTITY_TYPE_USER: &str = "User";
+pub const  ENTITY_TYPE_GROUP: &str = "Group";
+pub const  ENTITY_TYPE_ROLE: &str = "Role";
+pub const  ENTITY_TYPE_DEPARTMENT: &str = "Department";
+
+pub const  ENTITY_TYPE_POLICY: &str = "Policy";
+
+pub const  ENTITY_TYPE_ROBOT: &str = "Robot";
+
+pub const  ENTITY_ATTR_NAME: &str = "name";
+pub const ENTITY_ATTR_OWNERS: &str = "owners";
+
+
 
 /// 授权操作定义
 #[derive(Debug, Clone, Copy)]
@@ -38,7 +56,7 @@ pub enum AuthAction {
     ViewPolicy,
     CreatePolicy,
     UpdatePolicy,
-    DeletePolicy,
+    DeletePolicy
 }
 
 impl AuthAction {

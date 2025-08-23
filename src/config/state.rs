@@ -71,18 +71,4 @@ impl AppState {
         };
         Ok(app_state)
     }
-    
-    pub async fn cache_user_entities(
-        &self,
-        user_id: i32,
-        entities: Entities,
-    ) -> Result<(), AppError> {
-        self.cache_service
-            .cache_user_entities(user_id, entities)
-            .await
-    }
-    
-    pub async fn invalidate_user_entities(&self, username: &String) -> Result<(), AppError> {
-        self.cache_service.invalidate_user_entities(username).await
-    }
 }

@@ -6,7 +6,7 @@ use crate::schemas::cedar_policy::{CedarContext,
                                    CedarPolicyResponse,
                                    CreatePolicyDto,
                                    QueryParams};
-use crate::utils::cedar_utils::{AuthAction, ResourceType};
+use crate::utils::cedar_utils::{AuthAction, ResourceType, ENTITY_TYPE_POLICY, ENTITY_ATTR_NAME};
 use crate::{bad_request, not_found};
 use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, Policy, RestrictedExpression};
 use core::str::FromStr;
@@ -15,6 +15,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use crate::utils::function::reload_policies_and_schema;
+
 
 #[derive(Clone)]
 pub struct CedarPolicyService {
@@ -36,12 +37,12 @@ impl CedarPolicyService {
                 let mut entities = HashSet::new();
 
                 let policy_uid = EntityId::from_str(&*policy.policy_id.to_string())?;
-                let policy_typename = EntityTypeName::from_str("Policy")?;
+                let policy_typename = EntityTypeName::from_str(ENTITY_TYPE_POLICY)?;
                 let policy_e_uid = EntityUid::from_type_name_and_id(policy_typename, policy_uid);
 
                 let mut attrs = HashMap::new();
                 let name_exp = RestrictedExpression::new_string(policy.policy_str_id);
-                attrs.insert("name".to_string(), name_exp);
+                attrs.insert(ENTITY_ATTR_NAME.to_string(), name_exp);
 
                 let parents = HashSet::new();
                 let policy_entity = Entity::new(policy_e_uid, attrs, parents)?;

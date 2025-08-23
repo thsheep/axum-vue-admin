@@ -8,7 +8,7 @@ use crate::schemas::auth::CurrentUser;
 use crate::schemas::cedar_policy::CedarContext;
 use crate::schemas::groups::AssignRolesDto;
 use crate::schemas::groups::{AssignUsersDto, CreateGroupDto, GroupResponse, GroupRoleResponse, QueryParams};
-use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType};
+use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType, ENTITY_TYPE_GROUP, ENTITY_ATTR_NAME};
 use crate::{bad_request, conflict, not_found};
 use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression};
 // 用户组
@@ -45,12 +45,12 @@ impl GroupService {
         let mut entities = HashSet::new();
         for group in groups {
             let group_eid = EntityId::from_str(&group.user_group_id.to_string())?;
-            let group_typename = EntityTypeName::from_str("Group")?;
+            let group_typename = EntityTypeName::from_str(ENTITY_TYPE_GROUP)?;
             let group_e_uid = EntityUid::from_type_name_and_id(group_typename, group_eid);
             
             let mut attrs = HashMap::new();
             let name_expr = RestrictedExpression::new_string(group.name);
-            attrs.insert("name".to_string(), name_expr);
+            attrs.insert(ENTITY_ATTR_NAME.to_string(), name_expr);
             
             let parents = HashSet::new();
             let group_entity = Entity::new(group_e_uid, attrs, parents)?;

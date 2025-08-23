@@ -9,7 +9,7 @@ use crate::schemas::role::{
     CreateRoleDto, QueryParams, RoleFieldResponse, RoleResponse,
     UpdateRoleDto,
 };
-use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType};
+use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType, ENTITY_TYPE_ROLE, ENTITY_ATTR_NAME};
 use crate::{bad_request, conflict, not_found};
 use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QuerySelect, Select, Set, TransactionTrait};
@@ -48,12 +48,12 @@ impl RoleService {
         let mut entities = HashSet::new();
         for role in roles {
             let role_eid = EntityId::from_str(&role.role_id.to_string())?;
-            let role_typename = EntityTypeName::from_str("Role")?;
+            let role_typename = EntityTypeName::from_str(ENTITY_TYPE_ROLE)?;
             let role_e_uid = EntityUid::from_type_name_and_id(role_typename, role_eid);
 
             let mut attrs = HashMap::new();
             let name_expr = RestrictedExpression::new_string(role.role_name);
-            attrs.insert("name".to_string(), name_expr);
+            attrs.insert(ENTITY_ATTR_NAME.to_string(), name_expr);
 
             let parents = HashSet::new();
             let role_entity = Entity::new(role_e_uid, attrs, parents)?;
