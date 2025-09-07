@@ -7,7 +7,7 @@ use std::fmt;
 #[derive(Serialize)]
 pub struct PaginatedApiResponse<T: Serialize> {
     pub code: u16,
-    pub msg: String,
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
     pub total: u64,
@@ -26,7 +26,7 @@ impl<T: Serialize> PaginatedApiResponse<T> {
     ) -> Self {
         Self {
             code: status_code.as_u16(),
-            msg: "success".to_string(),
+            message: "success".to_string(),
             data: Some(data),
             total,
             page,
@@ -47,7 +47,7 @@ impl<T: Serialize> fmt::Debug for PaginatedApiResponse<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PaginatedApiResponse")
             .field("code", &self.code)
-            .field("msg", &self.msg)
+            .field("msg", &self.message)
             .field("total", &self.total)
             .field("page", &self.page)
             .field("page_size", &self.page_size)

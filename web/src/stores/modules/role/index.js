@@ -1,4 +1,3 @@
-// src/stores/roleStore.js
 
 import { defineStore } from 'pinia';
 import * as roleApi from '@/api/modules/roles';
