@@ -1,166 +1,100 @@
 <template>
-  <div v-bind="$attrs">
-    <QueryBar v-if="$slots.queryBar" mb-30 @search="handleSearch" @reset="handleReset">
-      <slot name="queryBar" />
-    </QueryBar>
+  <QueryBar v-if="$slots.queryBar" mb-30 @search="$emit('search')" @reset="$emit('reset')">
+    <slot name="queryBar" />
+  </QueryBar>
 
-    <n-data-table
+  <n-data-table
       :remote="remote"
       :loading="loading"
       :columns="columns"
-      :data="tableData"
+      :data="data"
       :scroll-x="scrollX"
       :row-key="(row) => row[rowKey]"
-      :pagination="isPagination ? pagination : false"
+      :pagination="paginationConfig"
       @update:checked-row-keys="onChecked"
-      @updatePage="onPageChange"
-      @updatePageSize="onUpdatePageSize"
-    />
-  </div>
+      @update:page="onPageChange"
+      @update:page-size="onPageSizeChange"
+  />
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import QueryBar from "@/components/query-bar/QueryBar.vue";
 
+const { t } = useI18n({ useScope: 'global' })
+
 const props = defineProps({
-  /**
-   * @remote true: 后端分页  false： 前端分页
-   */
-  remote: {
-    type: Boolean,
-    default: true,
+  data: {
+    type: Array,
+    required: true,
   },
-  /**
-   * @remote 是否分页
-   */
-  isPagination: {
+  loading: {
+    type: Boolean,
+    default: false,
+  },
+  pagination: {
+    type: [Object, Boolean],
+    default: () => ({}),
+  },
+
+
+  columns: {
+    type: Array,
+    required: true,
+  },
+  remote: {
     type: Boolean,
     default: true,
   },
   scrollX: {
     type: Number,
-    default: 450,
+    default: 1200,
   },
   rowKey: {
     type: String,
     default: 'id',
   },
-  columns: {
-    type: Array,
-    required: true,
-  },
-  /** queryBar中的参数 */
-  queryItems: {
-    type: Object,
-    default() {
-      return {}
-    },
-  },
-  /** 补充参数（可选） */
-  extraParams: {
-    type: Object,
-    default() {
-      return {}
-    },
-  },
-  /**
-   * ! 约定接口入参出参
-   * * 分页模式需约定分页接口入参
-   *    @page_size 分页参数：一页展示多少条，默认10
-   *    @page   分页参数：页码，默认1
-   */
-  getData: {
-    type: Function,
-    required: true,
-  },
-  pagination: {
-    type: Object,
-    default() {
-      return {}
-    },
-  },
 })
 
-const emit = defineEmits(['update:queryItems', 'onChecked', 'onDataChange'])
-const loading = ref(false)
-const initQuery = { ...props.queryItems }
-const tableData = ref([])
-//  分页放到了 Crud state.pagination
-// const pagination = reactive({
-//   page: 1,
-//   page_size: 10,
-//   pageSizes: [10, 20, 50, 100],
-//   showSizePicker: true,
-//   prefix({ itemCount }) {
-//     return `共 ${itemCount} 条`
-//   },
-//   onChange: (page) => {
-//     pagination.page = page
-//   },
-//   onUpdatePageSize: (pageSize) => {
-//     pagination.page_size = pageSize
-//     pagination.page = 1
-//     handleQuery()
-//   },
-// })
+const emit = defineEmits([
+  'update:page',
+  'update:pageSize',
+  'onChecked',
+  'search',
+  'reset',
+])
 
-async function handleQuery() {
-  try {
-    loading.value = true
-    let paginationParams = {}
-    // 如果非分页模式或者使用前端分页,则无需传分页参数
-    if (props.isPagination && props.remote) {
-      paginationParams = { page: props.pagination.page, page_size: props.pagination.page_size }
-    }
-    const { data, total } = await props.getData()
-    tableData.value = data
-    props.pagination.itemCount = total || 0
-  } catch (error) {
-    tableData.value = []
-    props.pagination.itemCount = 0
-  } finally {
-    emit('onDataChange', tableData.value)
-    loading.value = false
+
+const paginationConfig = computed(() => {
+  if (props.pagination === false || typeof props.pagination !== 'object') {
+    return false
   }
-}
-function handleSearch() {
-  props.pagination.page = 1
-  handleQuery()
-}
-async function handleReset() {
-  const queryItems = { ...props.queryItems }
-  for (const key in queryItems) {
-    queryItems[key] = null
+  return {
+    page: props.pagination.page,
+    pageSize: props.pagination.pageSize,
+    itemCount: props.pagination.total,
+    pageSizes: [10, 20, 50, 100],
+    showSizePicker: true,
+    prefix({ itemCount }) {
+      return t('common.text.pagination', { itemCount })
+    },
   }
-  emit('update:queryItems', { ...queryItems, ...initQuery })
-  await nextTick()
-  props.pagination.page = 1
-  await handleQuery()
-}
-function onPageChange(currentPage) {
-  props.pagination.page = currentPage
-  if (props.remote) {
-    handleQuery()
-  }
+})
+
+
+function onPageChange(page) {
+  emit('update:page', page)
 }
 
-function onUpdatePageSize(pageSize) {
-  props.pagination.pageSize = pageSize
-  props.pagination.page = 1
-  if (props.remote) {
-    handleQuery()
-  }
+function onPageSizeChange(pageSize) {
+  emit('update:pageSize', pageSize)
 }
 
 function onChecked(rowKeys) {
+  // 仅当存在选择列时才发出事件
   if (props.columns.some((item) => item.type === 'selection')) {
     emit('onChecked', rowKeys)
   }
 }
-
-defineExpose({
-  handleSearch,
-  handleReset,
-  tableData,
-})
 </script>

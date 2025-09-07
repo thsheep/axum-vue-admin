@@ -58,44 +58,54 @@
 </template>
 
 <script setup>
-import bgImg from '@/assets/images/login_bg.webp'
+import { ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import AppPage from "@/components/page/AppPage.vue";
-import {useUserStore} from "@/store/modules/user";
-import {useRoute, useRouter} from "vue-router";
+import { useUserStore } from '@/stores'
+import bgImg from '@/assets/images/login_bg.webp'
+import AppPage from "@/components/page/AppPage.vue"
 
-
-const { t } = useI18n({ useScope: 'global' })
+const userStore = useUserStore()
 const router = useRouter()
 const { query } = useRoute()
+const { t } = useI18n({ useScope: 'global' })
+
 
 const loginInfo = ref({
   username: '',
   password: '',
 })
-
 const loading = ref(false)
+
 async function handleLogin() {
-  console.log(loginInfo.value)
   const { username, password } = loginInfo.value
   if (!username || !password) {
     $message.warning(t('views.login.message_input_username_password'))
     return
   }
+
   try {
     loading.value = true
-    const userStore = useUserStore()
-    await userStore.login({ username, password: password.toString() })
-    if (query.redirect) {
-      const path = query.redirect
-      Reflect.deleteProperty(query, 'redirect')
-      await router.push({path, query})
-    } else {
-      await router.push('/')
+
+    await userStore.login({ username, password })
+
+    $message.success(t('views.login.message_login_success'))
+
+    const redirectPath = query.redirect || '/'
+    const remainingQuery = { ...query }
+    if (remainingQuery.redirect) {
+      delete remainingQuery.redirect
     }
-  } catch (e) {
-    console.error('login error', e.error)
+
+    await router.push({ path: redirectPath, query: remainingQuery })
+
+  } catch (error) {
+
+    $message.error(error.message || '登录失败，请检查您的凭据')
+    console.error('Login failed in component:', error);
+
+  } finally {
+    loading.value = false
   }
-  loading.value = false
 }
 </script>

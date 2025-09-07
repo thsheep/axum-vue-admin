@@ -18,6 +18,7 @@ use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, DbErr, EntityTrait, JoinT
 use tokio::task::JoinSet;
 use crate::not_found;
 use crate::schemas::cedar_policy::CedarContext;
+use crate::services::role::get_role_models_by_user_id;
 use crate::services::user::UserService;
 use crate::utils::cedar_utils::{AuthAction, ResourceType};
 
@@ -56,18 +57,23 @@ const UI_ACTIONS: UiActionMap = &[
     ("button:policy_create", AuthAction::CreatePolicy),
     ("button:policy_update", AuthAction::UpdatePolicy),
     ("button:policy_delete", AuthAction::DeletePolicy),
+    // Robots
+    ("munus:robots_management", AuthAction::ViewRobot),
+    ("button:robot_view", AuthAction::ViewRobot),
+    ("button:robot_create", AuthAction::CreateRobot),
+    ("button:robot_update", AuthAction::UpdateRobot),
+    ("button:robot_delete", AuthAction::DeleteRobot)
 ];
 
 
 #[derive(Clone)]
 pub struct MeService {
-    app_state: AppState,
-    user_service: UserService
+    app_state: AppState
 }
 
 impl MeService {
     pub fn new(app_state: AppState) -> Self {
-        Self { app_state: app_state.clone(), user_service: UserService::new(app_state) }
+        Self { app_state }
     }
 
     pub async fn profile(&self,
@@ -99,7 +105,7 @@ impl MeService {
                          context: CedarContext
     ) -> Result<UiPolicies, AppError> {
 
-        let mut ui_policies = HashSet::with_capacity(UI_ACTIONS.len());;
+        let mut ui_policies = HashSet::with_capacity(UI_ACTIONS.len());
 
         let mut join_set = JoinSet::new();
 
@@ -112,7 +118,7 @@ impl MeService {
 
             join_set.spawn(async move {
                 let has_permission = auth_service
-                    .check_permission(user, ctx, action, ResourceType::UI(None))
+                    .check_permission(user.user_id, ctx, action, ResourceType::UI(None))
                     .await?;
 
                 Ok::<(String, bool), AppError>((key, has_permission))
@@ -182,7 +188,7 @@ impl MeService {
     }
 
     async fn roles(&self, current_user: &CurrentUser) -> Result<Vec<String>, AppError> {
-        let role_names = self.user_service.get_user_role_models(current_user.user_id)
+        let role_names = get_role_models_by_user_id(&self.app_state.db, current_user.user_id)
             .await?
             .into_iter()
             .map(|x| x.role_name)

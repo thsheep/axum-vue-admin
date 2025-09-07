@@ -7,7 +7,7 @@
 
 <script setup>
 import { useFullscreen } from '@vueuse/core'
-import { useAppStore } from '@/store'
+import { useAppStore } from '@/stores'
 
 const appStore = useAppStore()
 const { isFullscreen, toggle } = useFullscreen()

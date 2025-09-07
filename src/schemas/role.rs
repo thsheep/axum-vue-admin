@@ -46,8 +46,6 @@ pub struct RoleFieldResponse {
     pub id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<i32>,
 }
 
 

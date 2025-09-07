@@ -71,7 +71,7 @@ impl CedarPolicyService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::ViewPolicy,
                 ResourceType::Policy(None),
@@ -141,7 +141,7 @@ impl CedarPolicyService {
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::ViewPolicy,
                 ResourceType::Policy(Some(policy_id)),
@@ -169,11 +169,10 @@ impl CedarPolicyService {
         dto: CreatePolicyDto,
     ) -> Result<CedarPolicyResponse, AppError> {
 
-        let user_id = current_user.user_id;
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::CreatePolicy,
                 ResourceType::Policy(None),
@@ -193,7 +192,7 @@ impl CedarPolicyService {
             effect: Set(effect),
             is_active: Set(dto.is_active),
             description: Set(dto.description),
-            created_by: Set(user_id),
+            created_by: Set(current_user.user_id),
             ..Default::default()
         };
 
@@ -203,7 +202,7 @@ impl CedarPolicyService {
         let creator = users::Entity::find_by_id(new_model.created_by)
             .one(&self.app_state.db)
             .await?
-            .ok_or(not_found!("User {} not found", user_id))?;
+            .ok_or(not_found!("User {} not found", current_user.user_id))?;
 
         let response = CedarPolicyResponse{
             policy_id: Some(new_model.policy_id),
@@ -239,7 +238,7 @@ impl CedarPolicyService {
         self.app_state
         .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::UpdatePolicy,
                 ResourceType::Policy(Some(policy_id)),
@@ -297,7 +296,7 @@ impl CedarPolicyService {
         self.app_state
         .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::DeletePolicy,
                 ResourceType::Policy(Some(policy_id)),
@@ -317,7 +316,7 @@ impl CedarPolicyService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::UpdatePolicy,
                 ResourceType::Policy(None),

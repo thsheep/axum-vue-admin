@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { useTagsStore, useAppStore } from '@/store'
+import { useTagsStore, useAppStore } from '@/stores'
 import { renderIcon } from '@/utils'
 
 const props = defineProps({

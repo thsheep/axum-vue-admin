@@ -1,8 +1,7 @@
-use std::any::Any;
 use crate::config::state::AppState;
 use crate::entity::{roles, user_groups, user_group_members, group_roles};
 
-use crate::services::role::RoleService;
+use crate::services::role::{get_role_entities};
 use crate::errors::app_error::AppError;
 use crate::schemas::auth::CurrentUser;
 use crate::schemas::cedar_policy::CedarContext;
@@ -10,9 +9,8 @@ use crate::schemas::groups::AssignRolesDto;
 use crate::schemas::groups::{AssignUsersDto, CreateGroupDto, GroupResponse, GroupRoleResponse, QueryParams};
 use crate::utils::cedar_utils::{entities2json, AuthAction, ResourceType, ENTITY_TYPE_GROUP, ENTITY_ATTR_NAME};
 use crate::{bad_request, conflict, not_found};
-use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression};
-// 用户组
-use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityOrSelect, EntityTrait, JoinType, ModelTrait, PaginatorTrait, QueryFilter, QuerySelect, RelationTrait, Select, Set, TransactionTrait};
+use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression, Schema};
+use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, ModelTrait, PaginatorTrait, QueryFilter, QuerySelect, RelationTrait, Select, Set, TransactionTrait};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -20,61 +18,15 @@ use tracing::debug;
 
 #[derive(Clone)]
 pub struct GroupService {
-    app_state: AppState,
-    role_service: RoleService
+    app_state: AppState
 }
 
 
 impl GroupService {
     pub fn new(app_state: AppState) -> Self {
         Self {
-            app_state: app_state.clone(),
-            role_service: RoleService::new(app_state)
+            app_state
         }
-    }
-
-
-    // 获取用户组实体信息
-    pub async fn get_group_entities(&self, group_ids: &[i32]) -> Result<Entities, AppError> {
-        let groups = user_groups::Entity::find()
-            .column(user_groups::Column::Name)
-            .filter(user_groups::Column::UserGroupId.is_in(group_ids.to_vec()))
-            .all(&self.app_state.db)
-            .await?;
-
-        let mut entities = HashSet::new();
-        for group in groups {
-            let group_eid = EntityId::from_str(&group.user_group_id.to_string())?;
-            let group_typename = EntityTypeName::from_str(ENTITY_TYPE_GROUP)?;
-            let group_e_uid = EntityUid::from_type_name_and_id(group_typename, group_eid);
-            
-            let mut attrs = HashMap::new();
-            let name_expr = RestrictedExpression::new_string(group.name);
-            attrs.insert(ENTITY_ATTR_NAME.to_string(), name_expr);
-            
-            let parents = HashSet::new();
-            let group_entity = Entity::new(group_e_uid, attrs, parents)?;
-            entities.insert(group_entity);
-        }
-
-        let schema = self.app_state.auth_service.get_schema_copy().await;
-        let verified_entities = Entities::from_entities(entities, Some(&schema))?;
-        let entities_json = entities2json(&verified_entities)?;
-        debug!("Groups:{:?}; Entities Json: {}", group_ids, entities_json);
-        Ok(verified_entities)
-    }
-
-    // 验证用户组ID是否存在
-    pub async fn validate_group_ids(&self, group_ids: &[i32]) -> Result<(), AppError> {
-        let existing_count = user_groups::Entity::find()
-            .filter(user_groups::Column::UserGroupId.is_in(group_ids.to_vec()))
-            .count(&self.app_state.db)
-            .await?;
-
-        if existing_count != group_ids.len() as u64 {
-            return Err(bad_request!("Some group do not exist".to_string()));
-        }
-        Ok(())
     }
 
     pub async fn list_groups(
@@ -87,7 +39,7 @@ impl GroupService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::ViewGroup,
                 ResourceType::Group(None),
@@ -169,7 +121,7 @@ impl GroupService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::CreateGroup,
                 ResourceType::Group(None),
@@ -204,12 +156,12 @@ impl GroupService {
                            current_user: CurrentUser,
                            context: CedarContext,
                            group_id: i32) -> Result<GroupResponse, AppError> {
-        
-        let es = self.get_group_entities(&vec![group_id]).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::ViewGroup,
                 ResourceType::Group(Some(group_id)),
@@ -230,12 +182,12 @@ impl GroupService {
                               context: CedarContext,
                               group_id: i32, 
                               update_group_dto: CreateGroupDto) -> Result<GroupResponse, AppError> {
-        
-        let es = self.get_group_entities(&vec![group_id]).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::UpdateGroup,
                 ResourceType::Group(Some(group_id)),
@@ -262,12 +214,13 @@ impl GroupService {
                               current_user: CurrentUser,
                               context: CedarContext,
                               group_id: i32) -> Result<(), AppError> {
-        
-        let es = self.get_group_entities(&vec![group_id]).await?;
+
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::DeleteGroup,
                 ResourceType::Group(Some(group_id)),
@@ -301,10 +254,27 @@ impl GroupService {
         Ok(())
     }
 
-    pub async fn assign_users(&self, id: i32, add_users_dto: AssignUsersDto) -> Result<(), AppError> {
+    pub async fn assign_users(&self,
+                              current_user: CurrentUser,
+                              context: CedarContext,
+                              group_id: i32, 
+                              dto: AssignUsersDto) -> Result<(), AppError> {
+
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let groups_es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
+        
+        self.app_state
+            .auth_service
+            .check_permission_with_entities(
+                current_user.user_id,
+                context,
+                AuthAction::CreateUser,
+                ResourceType::Group(Some(group_id)),
+                groups_es
+            ).await?;
         
         let txn = self.app_state.db.begin().await?;
-        if user_groups::Entity::find_by_id(id)
+        if user_groups::Entity::find_by_id(group_id)
             .one(&txn)
             .await?
             .is_none()
@@ -313,13 +283,13 @@ impl GroupService {
         };
         
         user_group_members::Entity::delete_many()
-            .filter(user_group_members::Column::GroupId.eq(id))
+            .filter(user_group_members::Column::GroupId.eq(group_id))
             .exec(&txn).await?;
         
 
-        user_group_members::Entity::insert_many( add_users_dto.user_ids.into_iter().map(|user_id| {
+        user_group_members::Entity::insert_many( dto.user_ids.into_iter().map(|user_id| {
             user_group_members::ActiveModel {
-                group_id: Set(id),
+                group_id: Set(group_id),
                 user_id: Set(user_id),
                 ..Default::default()
             }
@@ -330,8 +300,26 @@ impl GroupService {
         Ok(())
     }
 
-    pub async fn revoke_user(&self, id: i32, user_id: i32) -> Result<(), AppError> {
-        if user_groups::Entity::find_by_id(id)
+    pub async fn revoke_user(&self,
+                             current_user: CurrentUser,
+                             context: CedarContext,
+                             group_id: i32,
+                             user_id: i32) -> Result<(), AppError> {
+
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let groups_es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
+
+        self.app_state
+            .auth_service
+            .check_permission_with_entities(
+                current_user.user_id,
+                context,
+                AuthAction::DeleteUser,
+                ResourceType::Group(Some(group_id)),
+                groups_es
+            ).await?;
+        
+        if user_groups::Entity::find_by_id(group_id)
             .one(&self.app_state.db)
             .await?
             .is_none()
@@ -340,7 +328,7 @@ impl GroupService {
             }
         
         user_group_members::Entity::delete_many()
-            .filter(user_group_members::Column::GroupId.eq(id)
+            .filter(user_group_members::Column::GroupId.eq(group_id)
                 .and(user_group_members::Column::UserId.eq(user_id)))
             .exec(&self.app_state.db).await?;
         
@@ -363,8 +351,26 @@ impl GroupService {
     //     Ok(users)
     // }
 
-    pub async fn get_group_roles(&self, id: i32) -> Result<Vec<GroupRoleResponse>, AppError> {
-        if user_groups::Entity::find_by_id(id)
+    pub async fn get_group_roles(&self,
+                                 current_user: CurrentUser,
+                                 context: CedarContext,
+                                 group_id: i32) -> Result<Vec<GroupRoleResponse>, AppError> {
+
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let groups_es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
+
+        self.app_state
+            .auth_service
+            .check_permission_with_entities(
+                current_user.user_id,
+                context,
+                AuthAction::ViewRole,
+                ResourceType::Group(Some(group_id)),
+                groups_es
+            ).await?;
+        
+        
+        if user_groups::Entity::find_by_id(group_id)
             .one(&self.app_state.db)
             .await?
             .is_none(){
@@ -376,7 +382,7 @@ impl GroupService {
             .column_as(roles::Column::RoleId, "id")
             .column_as(roles::Column::RoleName, "name")
             .join(JoinType::InnerJoin, roles::Relation::GroupRoles.def())
-            .filter(group_roles::Column::GroupId.eq(id))
+            .filter(group_roles::Column::GroupId.eq(group_id))
             .into_model::<GroupRoleResponse>()
             .all(&self.app_state.db)
             .await?;
@@ -389,26 +395,25 @@ impl GroupService {
                               context: CedarContext,
                               group_id: i32,
                               dto: AssignRolesDto) -> Result<(), AppError> {
-
-        self.role_service.validate_role_id(&vec![dto.role_id]).await?;
-
-        let roles_es = self.role_service.get_role_entities(&vec![dto.role_id]).await?;
-        let groups_es = self.get_group_entities(&vec![group_id]).await?;
+        
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let role_es = get_role_entities(&self.app_state.db, &vec![dto.role_id], &schema).await?;
+        let groups_es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
 
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.clone(),
+                current_user.user_id.clone(),
                 context.clone(),
                 AuthAction::AssignRole,
                 ResourceType::Role(Some(dto.role_id)),
-                roles_es.clone()
+                role_es.clone()
             ).await?;
 
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::AssignRole,
                 ResourceType::Group(Some(group_id)),
@@ -446,23 +451,23 @@ impl GroupService {
                               group_id: i32,
                               role_id: i32
     ) -> Result<(), AppError> {
-        self.role_service.validate_role_id(&vec![role_id]).await?;
-        let roles_es = self.role_service.get_role_entities(&vec![role_id]).await?;
-        let groups_es = self.get_group_entities(&vec![group_id]).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let role_es = get_role_entities(&self.app_state.db, &vec![role_id], &schema).await?;
+        let groups_es = get_group_entities(&self.app_state.db,&vec![group_id], &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.clone(),
+                current_user.user_id.clone(),
                 context.clone(),
                 AuthAction::RevokeRole,
                 ResourceType::Role(Some(role_id)),
-                roles_es.clone()
+                role_es.clone()
             ).await?;
 
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::RevokeRole,
                 ResourceType::Group(Some(group_id)),
@@ -482,5 +487,35 @@ impl GroupService {
 
         Ok(())
     }
+}
 
+
+
+// 获取用户组实体信息
+pub async fn get_group_entities(db: &DatabaseConnection, group_ids: &[i32], schema: &Schema) -> Result<Entities, AppError> {
+    let groups = user_groups::Entity::find()
+        .column(user_groups::Column::Name)
+        .filter(user_groups::Column::UserGroupId.is_in(group_ids.to_vec()))
+        .all(db)
+        .await?;
+
+    let mut entities = HashSet::new();
+    for group in groups {
+        let group_eid = EntityId::from_str(&group.user_group_id.to_string())?;
+        let group_typename = EntityTypeName::from_str(ENTITY_TYPE_GROUP)?;
+        let group_e_uid = EntityUid::from_type_name_and_id(group_typename, group_eid);
+
+        let mut attrs = HashMap::new();
+        let name_expr = RestrictedExpression::new_string(group.name);
+        attrs.insert(ENTITY_ATTR_NAME.to_string(), name_expr);
+
+        let parents = HashSet::new();
+        let group_entity = Entity::new(group_e_uid, attrs, parents)?;
+        entities.insert(group_entity);
+    }
+
+    let verified_entities = Entities::from_entities(entities, Some(&schema))?;
+    let entities_json = entities2json(&verified_entities)?;
+    debug!("Groups:{:?}; Entities Json: {}", group_ids, entities_json);
+    Ok(verified_entities)
 }

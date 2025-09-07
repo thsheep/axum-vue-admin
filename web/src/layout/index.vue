@@ -34,7 +34,7 @@ import AppHeader from './components/header/index.vue'
 import SideBar from './components/sidebar/index.vue'
 import AppMain from './components/AppMain.vue'
 import AppTags from './components/tags/index.vue'
-import { useAppStore } from '@/store'
+import { useAppStore } from '@/stores'
 import { header, tags } from '~/settings'
 
 // 移动端适配

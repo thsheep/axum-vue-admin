@@ -2,11 +2,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use utoipa::ToSchema;
 use validator::Validate;
+use crate::schemas::user::UserID;
 
 // 用户认证信息
 #[derive(Clone, Debug)]
 pub struct CurrentUser {
-    pub user_id: i32,
+    pub user_id: UserID,
+    pub dept_id: i32,
     pub username: String,
     pub is_super_admin: bool,
 }
@@ -43,6 +45,7 @@ pub struct Claims {
     pub exp: u64,
     pub jti: Uuid,
     pub name: String,
+    pub dept_id: i32,
     pub token_type: TokenType,
     pub is_super_admin: bool,
 }

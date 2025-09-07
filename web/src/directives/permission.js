@@ -1,4 +1,4 @@
-import { useUserStore } from '@/store'
+import { useUserStore } from '@/stores'
 
 /**
  * 检查当前用户是否对某个UI资源有访问权限

@@ -7,6 +7,7 @@ use tracing::{info, warn, instrument, debug, error};
 use crate::forbidden;
 use crate::schemas::auth::CurrentUser;
 use crate::schemas::cedar_policy::CedarContext;
+use crate::schemas::user::UserID;
 use crate::utils::cedar_utils::{AuthAction, AuthorizationBuilder, ResourceType, USER_ENTITIES_CACHE_PREFIX};
 
 pub struct AuthContextInner {
@@ -34,58 +35,55 @@ impl CedarAuthService {
         }
     }
 
-    #[instrument(skip(self), fields(username = %current_user.username, action = ?action, resource = ?resource))]
     pub async fn check_permission(
         &self,
-        current_user: CurrentUser,
+        user_id: UserID,
         context: CedarContext,
         action: AuthAction,
         resource: ResourceType,
     ) -> Result<bool, AppError> {
-        let (request, username, resource_entities) = AuthorizationBuilder::new(current_user.clone(), context)
+        let (request, resource_entities) = AuthorizationBuilder::new(user_id, context)
             .action(action)
             .resource(resource)
             .build()?;
 
-        self.is_authorized(&current_user, &request, resource_entities)
+        self.is_authorized(user_id, &request, resource_entities)
             .await
     }
 
     /// 带资源实体的授权检查
-    #[instrument(skip(self, resource_entities), fields(username = %current_user.username, action = ?action, resource = ?resource))]
     pub async fn check_permission_with_entities(
         &self,
-        current_user: CurrentUser,
+        user_id: UserID,
         context: CedarContext,
         action: AuthAction,
         resource: ResourceType,
         resource_entities: Entities,
     ) -> Result<bool, AppError> {
-        let (request, username, _) = AuthorizationBuilder::new(current_user.clone(), context)
+        let (request, _) = AuthorizationBuilder::new(user_id, context)
             .action(action)
             .resource(resource)
             .resource_entities(resource_entities.clone())
             .build()?;
 
-        self.is_authorized(&current_user, &request, resource_entities)
+        self.is_authorized(user_id, &request, resource_entities)
             .await
     }
 
-    #[instrument(skip(self, request, resource_entities), fields(username = %current_user.username))]
     pub async fn is_authorized(
         &self,
-        current_user: &CurrentUser,
+        user_id: UserID,
         request: &Request,
         resource_entities: Entities,
     ) -> Result<bool, AppError> {
         // 从缓存获取用户实体
-        let cache_key = format!("{}:{}", USER_ENTITIES_CACHE_PREFIX, current_user.user_id);
+        let cache_key = format!("{}:{}", USER_ENTITIES_CACHE_PREFIX, user_id);
 
         let user_entities = self
             .cache_service
             .get_entities(cache_key)
             .await?
-            .ok_or_else(||forbidden!(format!("User[{}] Entities Not Found", current_user.username)))?;
+            .ok_or_else(||forbidden!(format!("UserID[{}] Entities Not Found", user_id)))?;
 
         // 合并资源实体
         let context = self.inner.read().await;
@@ -104,7 +102,7 @@ impl CedarAuthService {
             Decision::Allow => {
                 for policy_id in response.diagnostics().reason() {
                     if let Some(policy) = &context.policies.policy(policy_id) {
-                        debug!("{} 请求被允许，PolicyID：{}", current_user.username, policy.id());
+                        debug!("UserID:{} 请求被允许，PolicyID：{}", user_id, policy.id());
                     }
                 }
 
@@ -113,7 +111,7 @@ impl CedarAuthService {
             Decision::Deny => {
                 for policy_id in response.diagnostics().reason() {
                     if let Some(policy) = &context.policies.policy(policy_id) {
-                        debug!("{} 请求被拒绝，PolicyID：{}", current_user.username, policy.id());
+                        debug!("UserID:{} 请求被拒绝，PolicyID：{}", user_id, policy.id());
                         return Err(forbidden!("access denied".to_string()))
                     }
                 }
@@ -121,7 +119,7 @@ impl CedarAuthService {
                 for error in response.diagnostics().errors() {
                     error!("错误: {}", error);
                 }
-                debug!("{} 请求被拒绝，原因：没有匹配到放行规则", current_user.username);
+                debug!("UserID{} 请求被拒绝，原因：没有匹配到放行规则", user_id);
                 Err(forbidden!("access denied".to_string()))
             }
         }

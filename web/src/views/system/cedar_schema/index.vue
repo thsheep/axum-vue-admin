@@ -1,51 +1,69 @@
 <script setup>
-import { h, onMounted, ref, resolveDirective, withDirectives } from 'vue'
-import {
-  NButton,
-  NForm,
-  NFormItem,
-  NInput
-} from 'naive-ui'
+import { h, onMounted, ref, resolveDirective, withDirectives } from 'vue';
+import { NButton, NForm, NFormItem, NInput } from 'naive-ui';
+import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
+import { useSchemaStore } from '@/stores';
+import { renderIcon } from '@/utils';
+import CommonPage from '@/components/page/CommonPage.vue';
+import CrudModal from '@/components/table/CrudModal.vue';
+import CrudTable from '@/components/table/CrudTable.vue';
 
-import { useRouter } from 'vue-router'
+const $message = window.$message;
+const $dialog = window.$dialog;
 
-import CommonPage from '@/components/page/CommonPage.vue'
-import CrudModal from '@/components/table/CrudModal.vue'
-import CrudTable from '@/components/table/CrudTable.vue'
-
-import { renderIcon } from '@/utils'
-import { useResourceSchemaCrud } from '@/composables'
-
-defineOptions({ name: 'Schema管理' })
-
-const $table = ref(null)
-const vPermission = resolveDirective('permission')
-const router = useRouter()
+defineOptions({ name: 'Schema管理' });
 
 
-let resourceSchemaCurd = useResourceSchemaCrud({refresh: () => $table.value?.handleSearch()});
+const store = useSchemaStore();
+const { schemas, isLoading } = storeToRefs(store);
+const router = useRouter();
+const vPermission = resolveDirective('permission');
+
+
+const showModal = ref(false);
+const modalTitle = ref('编辑Schema');
+const currentItem = ref({});
+const isSubmitting = ref(false);
+
 
 onMounted(() => {
-  $table.value?.handleSearch();
+  store.fetchSchemas().catch(error => {
+    $message.error(`加载Schema失败: ${error.message}`);
+  });
+
+
   setTimeout(() => {
-    window.$dialog.warning({
+    $dialog.warning({
       title: '注意!!!',
-      content: () => h('div', [
-        h('p', '请慎重操作,错误的修改可能会导致权限失效！'),
-      ]),
+      content: '请慎重操作,错误的修改可能会导致权限失效！',
       positiveText: '我明白',
       negativeText: '不改了',
       maskClosable: false,
       closable: false,
-      onPositiveClick: () => {
-        console.log('我明白')
-      },
-      onNegativeClick: () => {
-        router.push('/')
-      }
-    })
-  }, 500)
-})
+      onNegativeClick: () => router.push('/'),
+    });
+  }, 500);
+});
+
+
+const handleEdit = (row) => {
+  currentItem.value = { ...row };
+  showModal.value = true;
+};
+
+const handleSave = async () => {
+  isSubmitting.value = true;
+  try {
+    await store.updateSchema(currentItem.value.id, currentItem.value);
+    $message.success('更新成功');
+    showModal.value = false;
+  } catch (error) {
+    $message.error(`更新失败: ${error.message}`);
+  } finally {
+    isSubmitting.value = false;
+  }
+};
 
 
 const columns = [
@@ -70,9 +88,7 @@ const columns = [
                   size: 'small',
                   type: 'primary',
                   style: 'margin-right: 8px;',
-                  onClick: () => {
-                    resourceSchemaCurd.handleEdit(row)
-                  },
+                  onClick: () => handleEdit(row),
                 },
                 {
                   default: () => '编辑',
@@ -80,49 +96,38 @@ const columns = [
                 }
             ),
             [[vPermission, 'button:policy_update']]
-        )
-      ]
+        ),
+      ];
     },
   },
-]
-
+];
 </script>
 
 <template>
   <CommonPage show-footer title="Schema列表">
-
     <CrudTable
-        ref="$table"
-        v-model:query-items="resourceSchemaCurd.state.searchParams"
         :columns="columns"
-        :pagination="resourceSchemaCurd.state.pagination"
-        :get-data="resourceSchemaCurd.loadData"
-    >
-    </CrudTable>
+        :data="schemas"
+        :loading="isLoading"
+        :pagination="false"
+    />
 
     <CrudModal
-        v-model:visible="resourceSchemaCurd.state.modalVisible"
-        :title="resourceSchemaCurd.state.modalTitle"
-        :loading="resourceSchemaCurd.state.loading"
-        @save="resourceSchemaCurd.handleSave"
+        v-model:visible="showModal"
+        :title="modalTitle"
+        :loading="isSubmitting"
+        @save="handleSave"
     >
-      <NForm
-          label-placement="left"
-          label-align="left"
-          :label-width="80"
-          :model="resourceSchemaCurd.state.currentItem"
-          :disabled="resourceSchemaCurd.state.modalType === 'view'"
-      >
+      <NForm :model="currentItem">
         <NFormItem label="Schema" path="schema" required>
           <NInput
               type="textarea"
-              v-model:value="resourceSchemaCurd.state.currentItem.schema"
+              v-model:value="currentItem.schema"
+              :autosize="{ minRows: 10, maxRows: 20 }"
           />
         </NFormItem>
         <NFormItem label="描述" path="description" required>
-          <NInput
-              v-model:value="resourceSchemaCurd.state.currentItem.description"
-          />
+          <NInput v-model:value="currentItem.description" />
         </NFormItem>
       </NForm>
     </CrudModal>

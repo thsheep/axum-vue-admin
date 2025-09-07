@@ -165,9 +165,15 @@ pub async fn delete_group(
 pub async fn assign_users(
     Path(group_id): Path<i32>,
     State(service): State<GroupService>,
+    Extension(current_user): Extension<CurrentUser>,
+    Extension(context): Extension<CedarContext>,
     Json(dto): Json<AssignUsersDto>,
 ) -> Result<ApiResponse<()>, AppError> {
-    service.assign_users(group_id, dto).await?;
+    service.assign_users(
+        current_user,
+        context,
+        group_id, 
+        dto).await?;
     Ok(ApiResponse::success_empty(StatusCode::OK))
 }
 
@@ -189,8 +195,14 @@ pub async fn assign_users(
 pub async fn revoke_users(
     Path((group_id, user_id)): Path<(i32, i32)>,
     State(service): State<GroupService>,
+    Extension(current_user): Extension<CurrentUser>,
+    Extension(context): Extension<CedarContext>
 ) -> Result<impl IntoResponse, AppError> {
-    service.revoke_user(group_id, user_id).await?;
+    service.revoke_user(
+        current_user,
+        context,
+        group_id, 
+        user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -269,7 +281,12 @@ pub async fn revoke_roles(
 pub async fn get_group_roles(
     Path(group_id): Path<i32>,
     State(service): State<GroupService>,
+    Extension(current_user): Extension<CurrentUser>,
+    Extension(context): Extension<CedarContext>
 ) -> Result<impl IntoResponse, AppError> {
-    let group_roles = service.get_group_roles(group_id).await?;
+    let group_roles = service.get_group_roles(
+        current_user,
+        context,
+        group_id).await?;
     Ok(ApiResponse::success(group_roles, StatusCode::OK))
 }

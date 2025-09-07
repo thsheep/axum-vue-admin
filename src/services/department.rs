@@ -1,12 +1,11 @@
 use crate::{bad_request, conflict, errors::app_error::AppError, forbidden, not_found};
-use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression};
+use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, RestrictedExpression, Schema};
 use sea_orm::{
     ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter, QuerySelect, TransactionTrait,
     entity::prelude::*,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::str::FromStr;
-
 use crate::config::state::AppState;
 use crate::entity::{departments, users};
 use crate::schemas::auth::CurrentUser;
@@ -31,35 +30,7 @@ impl DepartmentService {
     pub fn new(app_state: AppState) -> Self {
         Self { app_state }
     }
-
-    pub async fn get_dept_entities(&self, dept_id: i32) -> Result<Entities, AppError> {
-        let dept = departments::Entity::find_by_id(dept_id)
-            .one(&self.app_state.db)
-            .await?;
-
-        let dept = match dept {
-            Some(dept) => dept,
-            None => return Ok(Entities::empty()),
-        };
-
-        let dept_eid = EntityId::from_str(&dept.dept_id.to_string())?;
-        let dept_typename = EntityTypeName::from_str("Department")?;
-        let dept_e_uid = EntityUid::from_type_name_and_id(dept_typename, dept_eid);
-
-        let mut attrs = HashMap::new();
-        let name_expr = RestrictedExpression::new_string(dept.name);
-        attrs.insert("name".to_string(), name_expr);
-
-        let parents = HashSet::new();
-        let dept_entity = Entity::new(dept_e_uid, attrs, parents)?;
-
-        let schema = self.app_state.auth_service.get_schema_copy().await;
-        let verified_entities = Entities::from_entities(vec![dept_entity], Some(&schema))?;
-        let entities_json = entities2json(&verified_entities)?;
-        debug!("Dept:{:?}; Entities Json: {}", dept_id, entities_json);
-        Ok(verified_entities)
-    }
-
+    
     // 验证部门ID是否存在
     pub async fn validate_dept_id(&self, dept_id: i32) -> Result<(), AppError> {
         let exists = departments::Entity::find_by_id(dept_id)
@@ -81,7 +52,7 @@ impl DepartmentService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.clone(),
+                current_user.user_id.clone(),
                 context,
                 AuthAction::ViewDepartment,
                 ResourceType::Department(None),
@@ -127,7 +98,7 @@ impl DepartmentService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::CreateDepartment,
                 ResourceType::Department(None),
@@ -166,11 +137,12 @@ impl DepartmentService {
         dept_id: i32,
         dto: CreateDepartmentDto,
     ) -> Result<DepartmentResponse, AppError> {
-        let es = self.get_dept_entities(dept_id).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let es = get_dept_entities(&self.app_state.db, dept_id, &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.clone(),
+                current_user.user_id.clone(),
                 context.clone(),
                 AuthAction::UpdateDepartment,
                 ResourceType::Department(Some(dept_id)),
@@ -195,7 +167,7 @@ impl DepartmentService {
             self.app_state
                 .auth_service
                 .check_permission(
-                    current_user.clone(),
+                    current_user.user_id,
                     context,
                     AuthAction::MoveDepartment,
                     ResourceType::Department(Some(dept_id)),
@@ -216,11 +188,12 @@ impl DepartmentService {
         context: CedarContext,
         dept_id: i32,
     ) -> Result<(), AppError> {
-        let es = self.get_dept_entities(dept_id).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let es = get_dept_entities(&self.app_state.db, dept_id, &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::DeleteDepartment,
                 ResourceType::Department(Some(dept_id)),
@@ -304,11 +277,12 @@ impl DepartmentService {
                                   context: CedarContext,
                                   dept_id: i32) -> Result<Vec<UserResponse>, AppError> {
 
-        let es = self.get_dept_entities(dept_id).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let es = get_dept_entities(&self.app_state.db, dept_id, &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::ViewDepartmentUsers,
                 ResourceType::Department(Some(dept_id)),
@@ -324,80 +298,135 @@ impl DepartmentService {
         let users = assemble_user_info(&self.app_state.db, users_with_dept).await?;
         Ok(users)
     }
+}
 
-    // 获取指定部门的子部门
-    pub async fn find_descendants_entities(&self, dept_id: i32) -> Result<Entities, AppError> {
-        // 1. 一次性获取所有未被软删除的部门
-        let all_depts: Vec<departments::Model> = departments::Entity::find()
-            .filter(departments::Column::IsDeleted.eq(false))
-            .all(&self.app_state.db)
+
+pub async fn get_all_child_dept_ids(
+    db: &DatabaseConnection,
+    parent_dept_id: i32,
+) -> Result<Vec<i32>, sea_orm::DbErr> {
+    let mut all_dept_ids = vec![parent_dept_id];
+    let mut queue = VecDeque::new();
+    queue.push_back(parent_dept_id);
+
+    while let Some(current_dept_id) = queue.pop_front() {
+        let child_depts = departments::Entity::find()
+            .filter(departments::Column::ParentId.eq(current_dept_id))
+            .all(db)
             .await?;
 
-        // 2. 按父ID对部门进行分组，方便查找子部门
-        let depts_by_parent: HashMap<i32, Vec<&departments::Model>> =
-            all_depts.iter().fold(HashMap::new(), |mut acc, dept| {
-                acc.entry(dept.parent_id).or_default().push(dept);
-                acc
-            });
+        for dept in child_depts {
+            if !all_dept_ids.contains(&dept.dept_id) {
+                all_dept_ids.push(dept.dept_id);
+                queue.push_back(dept.dept_id);
+            }
+        }
+    }
 
-        // 3. 按部门ID创建索引，方便通过ID快速查找部门model
-        let depts_by_id: HashMap<i32, &departments::Model> =
-            all_depts.iter().map(|d| (d.dept_id, d)).collect();
+    Ok(all_dept_ids)
+}
 
-        // 3. 初始化遍历所需的数据结构
-        // 检查起始部门是否存在于我们获取的列表中
-        if !depts_by_id.contains_key(&dept_id) {
-            return Ok(Entities::empty()); // 如果起始部门不存在或已被删除，返回空结果
+
+// 获取指定部门的Entities
+
+pub async fn get_dept_entities(db: &DatabaseConnection, dept_id: i32, schema: &Schema) -> Result<Entities, AppError> {
+    let dept = departments::Entity::find_by_id(dept_id)
+        .one(db)
+        .await?;
+
+    let dept = match dept {
+        Some(dept) => dept,
+        None => return Ok(Entities::empty()),
+    };
+
+    let dept_eid = EntityId::from_str(&dept.dept_id.to_string())?;
+    let dept_typename = EntityTypeName::from_str("Department")?;
+    let dept_e_uid = EntityUid::from_type_name_and_id(dept_typename, dept_eid);
+
+    let mut attrs = HashMap::new();
+    let name_expr = RestrictedExpression::new_string(dept.name);
+    attrs.insert("name".to_string(), name_expr);
+
+    let parents = HashSet::new();
+    let dept_entity = Entity::new(dept_e_uid, attrs, parents)?;
+
+    let verified_entities = Entities::from_entities(vec![dept_entity], Some(&schema))?;
+    let entities_json = entities2json(&verified_entities)?;
+    debug!("Dept:{:?}; Entities Json: {}", dept_id, entities_json);
+    Ok(verified_entities)
+}
+
+// 获取指定部门所有的子部门Entities
+pub async fn find_descendants_entities(db: &DatabaseConnection, dept_id: i32) -> Result<Entities, AppError> {
+    // 1. 一次性获取所有未被软删除的部门
+    let all_depts: Vec<departments::Model> = departments::Entity::find()
+        .filter(departments::Column::IsDeleted.eq(false))
+        .all(db)
+        .await?;
+
+    // 2. 按父ID对部门进行分组，方便查找子部门
+    let depts_by_parent: HashMap<i32, Vec<&departments::Model>> =
+        all_depts.iter().fold(HashMap::new(), |mut acc, dept| {
+            acc.entry(dept.parent_id).or_default().push(dept);
+            acc
+        });
+
+    // 3. 按部门ID创建索引，方便通过ID快速查找部门model
+    let depts_by_id: HashMap<i32, &departments::Model> =
+        all_depts.iter().map(|d| (d.dept_id, d)).collect();
+
+    // 3. 初始化遍历所需的数据结构
+    // 检查起始部门是否存在于我们获取的列表中
+    if !depts_by_id.contains_key(&dept_id) {
+        return Ok(Entities::empty()); // 如果起始部门不存在或已被删除，返回空结果
+    }
+
+    let mut entities = HashSet::new(); // 使用 HashSet 存储最终的 Cedar 实体，自动去重
+    let mut ids_to_process: VecDeque<i32> = VecDeque::new();
+    let mut processed_ids: HashSet<i32> = HashSet::new(); // 防止因数据循环引用导致无限循环
+
+    // 4. 开始广度优先搜索 (BFS) 遍历
+    ids_to_process.push_back(dept_id);
+
+    while let Some(current_dept_id) = ids_to_process.pop_front() {
+        // 如果已处理过此ID，则跳过
+        if !processed_ids.insert(current_dept_id) {
+            continue;
         }
 
-        let mut entities = HashSet::new(); // 使用 HashSet 存储最终的 Cedar 实体，自动去重
-        let mut ids_to_process: VecDeque<i32> = VecDeque::new();
-        let mut processed_ids: HashSet<i32> = HashSet::new(); // 防止因数据循环引用导致无限循环
+        // 从索引中获取当前部门的模型，并将其转换为Cedar实体
+        if let Some(current_dept_model) = depts_by_id.get(&current_dept_id) {
+            let entity = try_dept_model_to_cedar_entity(current_dept_model)?;
+            entities.insert(entity);
 
-        // 4. 开始广度优先搜索 (BFS) 遍历
-        ids_to_process.push_back(dept_id);
-
-        while let Some(current_dept_id) = ids_to_process.pop_front() {
-            // 如果已处理过此ID，则跳过
-            if !processed_ids.insert(current_dept_id) {
-                continue;
-            }
-
-            // 从索引中获取当前部门的模型，并将其转换为Cedar实体
-            if let Some(current_dept_model) = depts_by_id.get(&current_dept_id) {
-                let entity = self.try_dept_model_to_cedar_entity(current_dept_model)?;
-                entities.insert(entity);
-
-                // 查找并添加所有直接子部门到处理队列中
-                if let Some(children) = depts_by_parent.get(&current_dept_id) {
-                    for child in children {
-                        // 仅添加未处理过的子部门ID
-                        if !processed_ids.contains(&child.dept_id) {
-                            ids_to_process.push_back(child.dept_id);
-                        }
+            // 查找并添加所有直接子部门到处理队列中
+            if let Some(children) = depts_by_parent.get(&current_dept_id) {
+                for child in children {
+                    // 仅添加未处理过的子部门ID
+                    if !processed_ids.contains(&child.dept_id) {
+                        ids_to_process.push_back(child.dept_id);
                     }
                 }
             }
         }
-        // 5. 从实体集合创建最终的 `Entities` 对象
-        Entities::from_entities(entities, None).map_err(AppError::from)
     }
+    // 5. 从实体集合创建最终的 `Entities` 对象
+    Entities::from_entities(entities, None).map_err(AppError::from)
+}
 
-    fn try_dept_model_to_cedar_entity(
-        &self,
-        dept: &departments::Model,
-    ) -> Result<Entity, AppError> {
-        let dept_eid = EntityId::from_str(&dept.dept_id.to_string())?;
-        let dept_typename = EntityTypeName::from_str(ENTITY_TYPE_DEPARTMENT)?;
-        let dept_e_uid = EntityUid::from_type_name_and_id(dept_typename, dept_eid);
+fn try_dept_model_to_cedar_entity(
+    dept: &departments::Model,
+) -> Result<Entity, AppError> {
+    let dept_eid = EntityId::from_str(&dept.dept_id.to_string())?;
+    let dept_typename = EntityTypeName::from_str(ENTITY_TYPE_DEPARTMENT)?;
+    let dept_e_uid = EntityUid::from_type_name_and_id(dept_typename, dept_eid);
 
-        let mut attrs = HashMap::new();
-        let name_expr = RestrictedExpression::new_string(dept.name.clone());
-        attrs.insert("name".to_string(), name_expr);
+    let mut attrs = HashMap::new();
+    let name_expr = RestrictedExpression::new_string(dept.name.clone());
+    attrs.insert("name".to_string(), name_expr);
 
-        // Cedar 实体中的 parents 指的是其所属的组，这里为空是合理的
-        let parents = HashSet::new();
-        let dept_entity = Entity::new(dept_e_uid, attrs, parents)?;
-        Ok(dept_entity)
-    }
+    // Cedar 实体中的 parents 指的是其所属的组，这里为空是合理的
+    let parents = HashSet::new();
+    let dept_entity = Entity::new(dept_e_uid, attrs, parents)?;
+    Ok(dept_entity)
 }

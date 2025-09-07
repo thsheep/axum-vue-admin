@@ -13,7 +13,7 @@
 </template>
 
 <script setup>
-import {useAppStore} from '@/store'
+import {useAppStore} from '@/stores'
 import {renderCustomIcon, renderIcon, isExternal} from '@/utils'
 import {useRoute, useRouter} from "vue-router";
 

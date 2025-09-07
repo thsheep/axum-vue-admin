@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { useAppStore } from '@/store'
+import { useAppStore } from '@/stores'
 import { useRouter } from 'vue-router'
 const appStore = useAppStore()
 const router = useRouter()

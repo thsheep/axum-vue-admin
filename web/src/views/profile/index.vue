@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { NButton, NForm, NFormItem, NInput, NTabPane, NTabs, NImage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import CommonPage from '@/components/page/CommonPage.vue'
-import { useUserStore } from '@/store'
+import { useUserStore } from '@/stores'
 import { is } from '~/src/utils'
 
 const { t } = useI18n()

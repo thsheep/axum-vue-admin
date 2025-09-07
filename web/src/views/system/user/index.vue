@@ -1,63 +1,176 @@
 <script setup>
-import {h, onMounted, ref, resolveDirective, withDirectives} from 'vue'
+import {h, onMounted, ref, reactive, resolveDirective, withDirectives, computed} from 'vue'
 import {
-  NButton,
-  NForm,
-  NFormItem,
-  NInput,
-  NLayout,
-  NLayoutContent,
-  NLayoutSider,
-  NPopconfirm, NPopover,
-  NSpace,
-  NSwitch,
-  NTag,
-  NTreeSelect,
+  NButton, NForm, NFormItem, NInput, NLayout, NLayoutContent, NLayoutSider,
+  NPopconfirm, NPopover, NSpace, NSwitch, NTag, NTreeSelect, NSelect, NModal, NDataTable, NTree
 } from 'naive-ui'
+import {storeToRefs} from 'pinia'
+import {useUserManagementStore} from '@/stores'
+import {formatDate, renderIcon, isEmail} from '@/utils'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
 import CrudModal from '@/components/table/CrudModal.vue'
 import CrudTable from '@/components/table/CrudTable.vue'
-
-import {formatDate, renderIcon} from '@/utils'
-import {useDeptCrud, useRoleCrud, useUserCrud, useUserGroupCrud} from '@/composables'
 import TheIcon from '@/components/icon/TheIcon.vue'
 
 defineOptions({name: '用户管理'})
 
-const $table = ref(null)
+
+const store = useUserManagementStore()
+const {
+  users,
+  pagination,
+  isTableLoading,
+  departmentOptions,
+  userGroupOptions,
+  roleOptions,
+  currentUserRoles,
+} = storeToRefs(store)
+
 const vPermission = resolveDirective('permission')
 
-let userCurd = useUserCrud({refresh: () => $table.value?.handleSearch()});
-let roleCurd = useRoleCrud();
-let userGroupCurd = useUserGroupCrud();
 
-let deptCurd = useDeptCrud();
-
-const deptOption = ref([]);
-const roleOption = ref([]);
-const userRoleInfo = ref([])
-const userGroupOption = ref([]);
-const showRoleModal = ref(false);
-const currentUserId = ref(null);
-const showPermissionModal = ref(false);
-const userPermissionTreeOption = ref([]);
-const userPermissionPattern = ref('')
+const showCrudModal = ref(false)
+const modalType = ref('create')
+const modalTitle = computed(() => modalType.value === 'create' ? '新建用户' : '编辑用户')
+const currentItem = ref({})
+const isSubmitting = ref(false)
 
 
-onMounted(async () => {
-  $table.value?.handleSearch()
-  const [deptResponse, userGroupResponse] = await Promise.all([
-    deptCurd.loadData(),
-    userGroupCurd.loadData({pageSize: 999, fields: 'id,name'}),
-  ]);
-  deptOption.value = deptResponse.data;
-  userGroupOption.value = userGroupResponse.data.map((item) => ({
-    label: item.name,
-    value: item.id,
-  }))
+const showRoleModal = ref(false)
+const currentUserId = ref(null)
+const selectedRoleIds = ref([])
+
+
+const queryParams = reactive({})
+
+
+onMounted(() => {
+  store.fetchDependencies()
+  handleSearch()
 })
+
+// --- 事件处理函数 ---
+const loadData = () => {
+  store.fetchUsers({
+    ...queryParams,
+    page: pagination.value.page,
+    pageSize: pagination.value.pageSize,
+  }).catch(error => {
+    $message.error(`加载用户失败: ${error.message}`)
+  })
+}
+
+// 处理来自 CrudTable 的搜索事件
+const handleSearch = () => {
+  pagination.value.page = 1 // 搜索时重置到第一页
+  loadData()
+}
+
+// 处理的重置事件
+const handleResetSearch = () => {
+  for (const key in queryParams) {
+    delete queryParams[key]
+  }
+  handleSearch()
+}
+
+// 处理的页码变更事件
+const handlePageChange = (page) => {
+  pagination.value.page = page
+  loadData()
+}
+
+// 处理页面大小变更事件
+const handlePageSizeChange = (pageSize) => {
+  pagination.value.pageSize = pageSize
+  pagination.value.page = 1
+  loadData()
+}
+
+// CURD
+
+const handleAdd = () => {
+  currentItem.value = { is_active: true }
+  modalType.value = 'create'
+  showCrudModal.value = true
+}
+
+const handleEdit = (row) => {
+  store.fetchUsers()
+  currentItem.value = {
+    ...row,
+    dept: row.dept?.id,
+    groups: row.groups?.map(g => g.id),
+  }
+  modalType.value = 'edit'
+  showCrudModal.value = true
+}
+
+const handleSave = async () => {
+  isSubmitting.value = true
+  try {
+    if (modalType.value === 'create') {
+      await store.createUser(currentItem.value)
+      $message.success('创建成功')
+    } else {
+      await store.updateUser(currentItem.value.id, currentItem.value)
+      $message.success('更新成功')
+    }
+    showCrudModal.value = false
+  } catch (error) {
+    $message.error(`操作失败: ${error.message}`)
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await store.deleteUser(row.id)
+    $message.success('删除成功')
+  } catch (error) {
+    $message.error(`删除失败: ${error.message}`)
+  }
+}
+
+// Role Modal
+const handleViewRoles = async (row) => {
+  currentUserId.value = row.id
+  selectedRoleIds.value = []
+  try {
+    await store.fetchUserRoles(row.id)
+    showRoleModal.value = true
+  } catch (error) {
+    $message.error(`获取角色失败: ${error.message}`)
+  }
+}
+
+const handleAddRoles = async () => {
+  if (!selectedRoleIds.value || selectedRoleIds.value.length === 0) {
+    $message.warning('请选择要添加的角色');
+    return;
+  }
+  try {
+    await store.addUserRoles(currentUserId.value, selectedRoleIds.value);
+    $message.success('角色添加成功');
+    selectedRoleIds.value = [];
+  } catch (error) {
+    $message.error(`添加失败: ${error.message}`);
+  }
+}
+
+const handleRemoveRole = async (roleId) => {
+  try {
+    await store.removeUserRole(currentUserId.value, roleId);
+    $message.success('角色移除成功');
+  } catch (error) {
+    $message.error(`移除失败: ${error.message}`);
+  }
+}
+
+
 const columns = [
   {
     title: '名称',
@@ -158,86 +271,39 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 80,
+    width: 280,
     align: 'center',
     fixed: 'right',
     render(row) {
       return [
         withDirectives(
-            h(
-                NButton,
+            h(NButton,
                 {
                   size: 'small',
                   type: 'primary',
                   style: 'margin-right: 8px;',
-                  onClick: () => {
-                    userCurd.handleEdit(row)
-                    userCurd.state.currentItem.dept = row.dept?.id
-                    userCurd.state.currentItem.groups = row.groups?.map((item) => item.id)
-                  },
-                },
-                {
-                  default: () => '编辑',
-                  icon: renderIcon('material-symbols:edit', {size: 16}),
-                }
-            ),
+                  onClick: () => handleEdit(row)},
+                {default: () => '编辑', icon: renderIcon('material-symbols:edit', {size: 16})}),
             [[vPermission, 'button:user_update']]
         ),
         withDirectives(
-            h(
-                NButton,
-                {
+            h(NButton, {
                   size: 'small',
                   type: 'primary',
                   style: 'margin-right: 8px;',
-                  onClick: () => {
-                    currentUserId.value = row.id
-                    userCurd.getRelated(row.id, "roles").then((res) => {
-                      userRoleInfo.value = res.data
-                    })
-                    roleCurd.loadData({pageSize: 999, fields: 'id,name'}).then((res) => {
-                      roleOption.value = res.data.map((item) => ({
-                        label: item.name,
-                        value: item.id,
-                      }))})
-                    showRoleModal.value = true
-                  },
+                  onClick: () => handleViewRoles(row)
                 },
-                {
-                  default: () => '查看角色',
-                  icon: renderIcon('material-symbols:visibility-outline', {size: 16}),
-                }
-            ),
+                {default: () => '查看角色', icon: renderIcon('material-symbols:visibility-outline', {size: 16})}),
             [[vPermission, 'button:user_view']]
         ),
-        h(
-            NPopconfirm,
+        h(NPopconfirm, {onPositiveClick: () => handleDelete(row)},
             {
-              onPositiveClick: async () => {
-                await userCurd.handleDelete(row);
-                await $table.value?.handleSearch();
-              },
-              onNegativeClick: () => {
-              },
-            },
-            {
-              trigger: () =>
-                  withDirectives(
-                      h(
-                          NButton,
-                          {
-                            size: 'small',
-                            type: 'error',
-                            style: 'margin-right: 8px;',
-                          },
-                          {
-                            default: () => '删除',
-                            icon: renderIcon('material-symbols:delete-outline', {size: 16}),
-                          }
-                      ),
-                      [[vPermission, 'button:user_delete']]
-                  ),
-              default: () => h('div', {}, '确定删除该用户吗?'),
+              trigger: () => withDirectives(
+                  h(NButton, {size: 'small', type: 'error'},
+                      {default: () => '删除', icon: renderIcon('material-symbols:delete-outline', {size: 16})}),
+                  [[vPermission, 'button:user_delete']]
+              ),
+              default: () => '确定删除该用户吗?'
             }
         ),
       ]
@@ -267,62 +333,27 @@ const userRoleColumns = [
   {
     title: '操作',
     key: 'actions',
-    align: 'center',
-    width: 150,
-    fixed: 'right',
     render(row) {
-      if (row.source === 'direct'){
-        return [
-          h(
-              NPopconfirm,
-              {
-                onPositiveClick: async () => {
-                  await userCurd.removeRelation(currentUserId.value, 'roles', row.id);
-                  showRoleModal.value = false;
-                },
-                onNegativeClick: () => {},
-              },
-              {
-                trigger: () =>
-                    withDirectives(
-                        h(
-                            NButton,
-                            {
-                              size: 'small',
-                              type: 'error',
-                              style: 'margin-right: 8px;',
-                            },
-                            {
-                              default: () => '删除',
-                              icon: renderIcon('material-symbols:delete-outline', { size: 16 }),
-                            }
-                        ),
-                        [[vPermission, 'button:user_delete']]
-                    ),
-                default: () => h('div', {}, '确定删除该角色吗?'),
-              }
-          )
-        ]
+      if (row.source === 'direct') {
+        return h(NPopconfirm, {onPositiveClick: () => handleRemoveRole(row.id)},
+            {
+              trigger: () => withDirectives(
+                  h(NButton,
+                      {
+                        size: 'small',
+                        type: 'error'},
+                      {
+                        default: () => '删除',
+                        icon: renderIcon('material-symbols:delete-outline',{size: 16})}),
+                  [[vPermission, 'button:user_delete']]
+              ),
+              default: () => '确定删除该用户的直接角色吗?',
+            }
+        )
       }
     }
-  },
-]
-
-const nodeProps = ({option}) => {
-  return {
-    onClick() {
-      if (userCurd.state.searchParams.dept_id === option.id) {
-        delete userCurd.state.searchParams.dept_id
-        $table.value?.handleSearch()
-      } else {
-        userCurd.state.searchParams.dept_id = option.id
-        userCurd.loadData().then((res) => {
-          $table.value.tableData = res.data
-        })
-      }
-    },
   }
-}
+]
 
 const validateAddUser = {
   username: [
@@ -342,7 +373,7 @@ const validateAddUser = {
       trigger: ['blur'],
       validator: (rule, value, callback) => {
         const re = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/
-        if (!re.test(userCurd.state.currentItem.email)) {
+        if (!re.test(currentItem.email)) {
           callback('邮箱格式错误')
           return
         }
@@ -357,23 +388,6 @@ const validateAddUser = {
       trigger: ['input', 'blur', 'change'],
     },
   ],
-  confirmPassword: [
-    {
-      required: true,
-      message: '请再次输入密码',
-      trigger: ['input'],
-    },
-    {
-      trigger: ['blur'],
-      validator: (rule, value, callback) => {
-        if (value !== userCurd.state.currentItem.password) {
-          callback('两次密码输入不一致')
-          return
-        }
-        callback()
-      },
-    },
-  ],
   dept_ids: [
     {
       type: 'array',
@@ -382,118 +396,121 @@ const validateAddUser = {
       trigger: ['blur', 'change'],
     },
   ],
+  confirmPassword: [
+    {
+      required: true,
+      message: '请再次输入密码',
+      trigger: ['input'],
+    },
+    {
+      trigger: ['blur'],
+      validator: (rule, value) => {
+        if (value !== currentItem.value.password) {
+          return new Error('两次密码输入不一致');
+        }
+        return true;
+      },
+    },
+  ],
 }
 
-
-function handleUserAddRoles(){
-  if (!userCurd.state.currentItem.role_ids) {
-    $message.warning('请先选择角色')
-    return
+// 左侧的部门选择
+const nodeProps = ({option}) => {
+  return {
+    onClick() {
+      if (queryParams.dept_id === option.id) {
+        delete queryParams.dept_id
+        handleSearch()
+      } else {
+        queryParams.dept_id=option.id
+        handleSearch()
+      }
+    },
   }
-  userCurd.addRelation(currentUserId.value, 'roles', {ids: userCurd.state.currentItem.role_ids})
-      .then(() => {
-        showRoleModal.value = false
-        delete userCurd.state.currentItem.role_ids
-      }).catch((error) => {
-        console.log(error)
-        showRoleModal.value = false
-  })
 }
-
 </script>
 
 <template>
   <NLayout has-sider wh-full>
-    <NLayoutSider
-        bordered
-        content-style="padding: 24px;"
-        :collapsed-width="0"
-        :width="240"
-        show-trigger="arrow-circle"
-    >
+    <NLayoutSider bordered content-style="padding: 24px;" :width="240" show-trigger="arrow-circle">
       <h1>部门列表</h1>
       <br/>
       <NTree
           block-line
-          :data="deptOption"
+          :data="departmentOptions"
           key-field="id"
           label-field="name"
           default-expand-all
           :node-props="nodeProps"
-      >
-      </NTree>
+      />
     </NLayoutSider>
     <NLayoutContent>
       <CommonPage show-footer title="用户列表">
         <template #action>
-          <NButton v-permission="'button:user_create'" type="primary" @click="userCurd.handleAdd">
+          <NButton v-permission="'button:user_create'" type="primary" @click="handleAdd">
             <TheIcon icon="material-symbols:add" :size="18" class="mr-5"/>
             新建用户
           </NButton>
         </template>
-        <!-- 表格 -->
+
         <CrudTable
-            ref="$table"
-            v-model:query-items="userCurd.state.searchParams"
             :columns="columns"
-            :get-data="userCurd.loadData"
-            :pagination="userCurd.state.pagination"
+            :data="users"
+            :loading="isTableLoading"
+            :pagination="pagination"
+            @update:page="handlePageChange"
+            @update:page-size="handlePageSizeChange"
+            @search="handleSearch"
+            @reset="handleResetSearch"
         >
           <template #queryBar>
             <QueryBarItem label="名称" :label-width="40">
               <NInput
-                  v-model:value="userCurd.state.searchParams.username"
+                  v-model:value="queryParams.username"
                   clearable
                   type="text"
                   placeholder="请输入用户名称"
-                  @keypress.enter="$table?.handleSearch()"
+                  @keypress.enter="handleSearch()"
               />
             </QueryBarItem>
             <QueryBarItem label="邮箱" :label-width="40">
               <NInput
-                  v-model:value="userCurd.state.searchParams.email"
+                  v-model:value="queryParams.email"
                   clearable
                   type="text"
                   placeholder="请输入邮箱"
-                  @keypress.enter="$table?.handleSearch()"
+                  @keypress.enter="handleSearch()"
               />
             </QueryBarItem>
+            <!-- ... -->
           </template>
         </CrudTable>
 
-        <!-- 新增/编辑 弹窗 -->
         <CrudModal
-            v-model:visible="userCurd.state.modalVisible"
-            :title="userCurd.state.modalTitle"
-            :loading="userCurd.state.loading"
-            @save="userCurd.handleSave"
+            v-model:visible="showCrudModal"
+            :title="modalTitle"
+            :loading="isSubmitting"
+            @save="handleSave"
         >
-          <NForm
-              ref="curd.state.currentItem"
-              label-placement="left"
-              label-align="left"
-              :label-width="80"
-              :model="userCurd.state.currentItem"
-              :rules="validateAddUser"
-          >
+          <NForm :model="currentItem" :rules="validateAddUser" label-placement="left" label-width="auto">
             <NFormItem label="用户名称" path="username">
-              <NInput v-model:value="userCurd.state.currentItem.username" clearable/>
+              <NInput v-model:value="currentItem.username"/>
             </NFormItem>
             <NFormItem label="邮箱" path="email">
-              <NInput v-model:value="userCurd.state.currentItem.email" clearable/>
+              <NInput v-model:value="currentItem.email" clearable/>
             </NFormItem>
-            <NFormItem v-if="userCurd.state.modalType === 'create'" label="密码" path="password">
+            <NFormItem v-if="modalType === 'create'" label="密码" path="password">
               <NInput
-                  v-model:value="userCurd.state.currentItem.password"
+                  v-model:value="currentItem.password"
                   show-password-on="mousedown"
                   type="password"
                   clearable
                   placeholder="请输入密码"
               />
             </NFormItem>
-            <NFormItem v-if="userCurd.state.modalType === 'create'" label="确认密码" path="confirmPassword">
+            <NFormItem v-if="modalType === 'create'" label="确认密码" path="confirmPassword">
               <NInput
-                  v-model:value="userCurd.state.currentItem.confirmPassword"
+                  v-model:value="currentItem.confirmPassword"
                   show-password-on="mousedown"
                   type="password"
                   clearable
@@ -501,15 +518,15 @@ function handleUserAddRoles(){
             </NFormItem>
             <NFormItem label="用户组" path="group">
               <NSelect
-                  :options="userGroupOption"
-                  v-model:value="userCurd.state.currentItem.groups"
+                  :options="userGroupOptions"
+                  v-model:value="currentItem.groups"
                   multiple
                   clearable/>
             </NFormItem>
             <NFormItem label="部门" path="dept">
               <NTreeSelect
-                  v-model:value="userCurd.state.currentItem.dept"
-                  :options="deptOption"
+                  v-model:value="currentItem.dept"
+                  :options="departmentOptions"
                   key-field="id"
                   label-field="name"
                   placeholder="请选择部门"
@@ -519,7 +536,7 @@ function handleUserAddRoles(){
             </NFormItem>
             <NFormItem label="禁用" path="is_active">
               <NSwitch
-                  v-model:value="userCurd.state.currentItem.is_active"
+                  v-model:value="currentItem.is_active"
                   :checked-value="false"
                   :unchecked-value="true"
                   :default-value="true"
@@ -532,47 +549,25 @@ function handleUserAddRoles(){
                 title="角色"
                 preset="card"
                 size="large"
+                style="width: 700px"
                 @close="showRoleModal = false">
           <NSpace vertical :size="12">
             <NSpace :size="12">
               <NSelect
-                  :options="roleOption"
+                  :options="roleOptions"
                   :consistent-menu-width="false"
-                  v-model:value="userCurd.state.currentItem.role_ids"
+                  v-model:value="currentItem.ids"
                   style="min-width: 150px"
                   filterable
                   clearable
                   multiple/>
-              <NButton @click="handleUserAddRoles">添加角色</NButton>
+              <NButton @click="handleAddRoles">添加角色</NButton>
             </NSpace>
-            <NDataTable
-                :columns="userRoleColumns"
-                :data="userRoleInfo"
-            />
+            <NDataTable :columns="userRoleColumns" :data="currentUserRoles"/>
           </NSpace>
         </NModal>
-        <!-- 权限 弹窗 -->
-        <NModal
-            :show="showPermissionModal"
-            title="权限"
-            preset="card"
-            size="small"
-            style="max-width: 500px"
-            @close="showPermissionModal = false">
-          <NSpace vertical :size="12">
-            <NInput
-                v-model:value="userPermissionPattern"
-                placeholder="请输入权限名称"
-                style="flex-grow: 1"
-            ></NInput>
-            <NTree
-            :data="userPermissionTreeOption"
-            :pattern="userPermissionPattern"
-            />
-          </NSpace>
-        </NModal>
+
       </CommonPage>
     </NLayoutContent>
   </NLayout>
-  <!-- 业务页面 -->
 </template>

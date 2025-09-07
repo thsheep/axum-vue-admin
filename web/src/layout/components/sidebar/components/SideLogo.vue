@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { useAppStore } from '@/store'
+import { useAppStore } from '@/stores'
 const title = import.meta.env.VITE_TITLE
 
 const appStore = useAppStore()

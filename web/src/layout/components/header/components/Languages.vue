@@ -8,7 +8,7 @@
 
 <script setup>
 import { useI18n } from 'vue-i18n'
-import { useAppStore } from '@/store'
+import { useAppStore } from '@/stores'
 import { router } from '~/src/router'
 
 const store = useAppStore()

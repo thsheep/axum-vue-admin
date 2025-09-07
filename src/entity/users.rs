@@ -16,7 +16,7 @@ pub struct Model {
     pub email: String,
     pub phone: Option<String>,
     pub password: String,
-    pub dept_id: Option<i32>,
+    pub dept_id: i32,
     #[sea_orm(custom_type="i8")]
     pub is_active: bool,
     pub avatar: Option<String>,
@@ -27,6 +27,8 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::cedar_policy_set::Entity")]
+    CedarPolicySet,
     #[sea_orm(
         belongs_to = "super::departments::Entity",
         from = "Column::DeptId",
@@ -39,6 +41,12 @@ pub enum Relation {
     UserGroupMembers,
     #[sea_orm(has_many = "super::user_roles::Entity")]
     UserRoles,
+}
+
+impl Related<super::cedar_policy_set::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::CedarPolicySet.def()
+    }
 }
 
 impl Related<super::departments::Entity> for Entity {
@@ -78,3 +86,4 @@ impl Related<super::user_groups::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+

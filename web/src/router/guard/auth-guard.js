@@ -1,5 +1,5 @@
 import {hasPermission} from "@/directives/permission";
-import {useUserStore} from "@/store";
+import {useUserStore} from "@/stores";
 import {addDynamicRoutes} from "@/router";
 
 const WHITE_LIST = ['/login', '/404', '/forgot-password', /^\/reset-password\/.*/]
@@ -20,7 +20,6 @@ export function createAuthGuard(router) {
     }
 
     if (!userStore.isDynamicRoutesAdded) { // 使用标志位防止重复添加
-
       addDynamicRoutes();
 
       userStore.setDynamicRoutesAdded(true); // 设置标志位

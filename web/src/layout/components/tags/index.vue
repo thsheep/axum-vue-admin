@@ -25,7 +25,7 @@
 
 <script setup>
 import ContextMenu from './ContextMenu.vue'
-import { useTagsStore } from '@/store'
+import { useTagsStore } from '@/stores'
 import ScrollX from '@/components/common/ScrollX.vue'
 
 const route = useRoute()

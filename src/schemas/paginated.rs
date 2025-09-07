@@ -12,6 +12,7 @@ pub struct PaginatedApiResponse<T: Serialize> {
     pub data: Option<T>,
     pub total: u64,
     pub page: u64,
+    #[serde(rename = "pageSize")]
     pub page_size: u64,
 }
 

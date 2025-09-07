@@ -1,235 +1,287 @@
 <script setup>
-import { h, onMounted, ref, resolveDirective, withDirectives } from 'vue'
+import {h, onMounted, ref, reactive, resolveDirective, withDirectives, computed} from 'vue';
 import {
-  NButton,
-  NForm,
-  NFormItem,
-  NInput,
-  NPopconfirm, NSwitch,
-  NTag,
-} from 'naive-ui'
+  NButton, NFlex, NForm, NFormItem, NInput, NPopconfirm, NSwitch, NTag, NSelect
+} from 'naive-ui';
+import {storeToRefs} from 'pinia';
+import {usePolicyStore} from '@/stores';
+import {useRouter} from 'vue-router';
+import {renderIcon} from '@/utils';
+import CommonPage from '@/components/page/CommonPage.vue';
+import QueryBarItem from '@/components/query-bar/QueryBarItem.vue';
+import CrudModal from '@/components/table/CrudModal.vue';
+import CrudTable from '@/components/table/CrudTable.vue';
+import TheIcon from '@/components/icon/TheIcon.vue';
 
-import CommonPage from '@/components/page/CommonPage.vue'
-import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
-import CrudModal from '@/components/table/CrudModal.vue'
-import CrudTable from '@/components/table/CrudTable.vue'
+const $message = window.$message;
+const $dialog = window.$dialog;
 
-import { formatDate, renderIcon } from '@/utils'
-import { useResourcePoliciesCrud } from '@/composables'
-import TheIcon from '@/components/icon/TheIcon.vue'
-import {useRouter} from "vue-router";
-
-defineOptions({ name: '策略管理' })
-
-const $table = ref(null)
-const vPermission = resolveDirective('permission')
-const router = useRouter()
+defineOptions({name: '策略管理'});
 
 
-let resourcePoliciesCurd = useResourcePoliciesCrud({refresh: () => $table.value?.handleSearch()});
+const store = usePolicyStore();
+const {policies, pagination, isTableLoading, isSyncing} = storeToRefs(store);
+const router = useRouter();
+const vPermission = resolveDirective('permission');
+
+
+const showModal = ref(false);
+const modalType = ref('create');
+const modalTitle = computed(() => (modalType.value === 'create' ? '新建策略' : '编辑策略'));
+const currentItem = ref({});
+const isSubmitting = ref(false);
+
+const queryParams = reactive({});
+
 
 onMounted(() => {
-  $table.value?.handleSearch();
   setTimeout(() => {
-    window.$dialog.warning({
+    $dialog.warning({
       title: '注意!!!',
-      content: () => h('div', [
-        h('p', '请慎重操作,错误的修改可能会导致权限失效！'),
-      ]),
+      content: '请慎重操作,错误的修改可能会导致权限失效！',
       positiveText: '我明白',
       negativeText: '不改了',
       maskClosable: false,
       closable: false,
-      onPositiveClick: () => {
-        console.log('我明白')
-      },
-      onNegativeClick: () => {
-        router.push('/')
-      }
-    })
-  }, 500)
-})
+      onNegativeClick: () => router.push('/'),
+    });
+  }, 500);
+  loadData(1, 10)
+});
 
+
+const loadData = (page, pageSize) => {
+  store.fetchPolicies({...queryParams, page, pageSize})
+      .catch(error => $message.error(`加载策略失败: ${error.message}`));
+};
+
+const handlePageChange = (page) => loadData(page, pagination.value.pageSize);
+const handlePageSizeChange = (pageSize) => loadData(1, pageSize);
+const handleSearch = () => loadData(1, pagination.value.pageSize);
+const handleResetSearch = () => {
+  for (const key in queryParams) {
+    delete queryParams[key]
+  }
+  handleSearch()
+}
+
+// CRUD 处理器
+const handleAdd = () => {
+  currentItem.value = {is_active: true};
+  modalType.value = 'create';
+  showModal.value = true;
+};
+
+const handleEdit = (row) => {
+  currentItem.value = {...row};
+  modalType.value = 'edit';
+  showModal.value = true;
+};
+
+const handleSave = async () => {
+  isSubmitting.value = true;
+  try {
+    if (modalType.value === 'create') {
+      await store.createPolicy(currentItem.value);
+      $message.success('创建成功');
+    } else {
+      await store.updatePolicy(currentItem.value.id, currentItem.value);
+      $message.success('更新成功');
+    }
+    showModal.value = false;
+  } catch (error) {
+    $message.error(`保存失败: ${error.message}`);
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+const handleDelete = async (row) => {
+  try {
+    await store.deletePolicy(row.id);
+    $message.success('删除成功');
+  } catch (error) {
+    $message.error(`删除失败: ${error.message}`);
+  }
+};
+
+// 特殊操作处理器
+const handleSyncPolicies = async () => {
+  try {
+    await store.syncPolicies();
+    $message.success('同步成功，策略已生效');
+  } catch (error) {
+    $message.error(`同步失败: ${error.message}`);
+  }
+};
 
 
 const columns = [
   {
     title: '注释',
     key: 'policy_str_id',
-    width: 80,
+    width: 450,
     align: 'center',
-    ellipsis: { tooltip: true },
+    ellipsis: {tooltip: true},
   },
   {
     title: '效果',
     key: 'effect',
     width: 80,
     align: 'center',
-    ellipsis: { tooltip: true },
+    ellipsis: {tooltip: true},
   },
   {
     title: '状态',
     key: 'is_active',
-    width: 80,
+    width: 100,
     align: 'center',
     render(row) {
       return h(NSwitch,
-          { defaultValue: row.is_active, disabled: true },
+          {defaultValue: row.is_active, disabled: true},
           {
-        checked: () => '启用',
-        unchecked: () => '禁用'
-      })
+            checked: () => '启用',
+            unchecked: () => '禁用'
+          })
     },
   },
   {
     title: '描述',
     key: 'description',
-    width: 80,
+    width: 150,
     align: 'center',
   },
   {
     title: '操作',
     key: 'actions',
-    width: 80,
+    width: 350,
     align: 'center',
-    fixed: 'right',
     render(row) {
       return [
         withDirectives(
-            h(
-                NButton,
+            h(NButton,
                 {
                   size: 'small',
                   type: 'primary',
                   style: 'margin-right: 8px;',
-                  onClick: () => {
-                    resourcePoliciesCurd.handleEdit(row)
-                  },
+                  onClick: () => handleEdit(row)
                 },
                 {
                   default: () => '编辑',
-                  icon: renderIcon('material-symbols:edit-outline', { size: 16 }),
+                  icon: renderIcon('material-symbols:edit-outline', {size: 16}),
                 }
             ),
             [[vPermission, 'button:policy_update']]
         ),
-        h(
-            NPopconfirm,
-            {
-              onPositiveClick: () => resourcePoliciesCurd.handleDelete({ id: row.id }, false),
-              onNegativeClick: () => {},
-            },
-            {
-              trigger: () =>
-                  withDirectives(
-                      h(
-                          NButton,
-                          {
-                            size: 'small',
-                            type: 'error',
-                            style: 'margin-right: 8px;',
-                          },
-                          {
-                            default: () => '删除',
-                            icon: renderIcon('material-symbols:delete-outline', { size: 16 }),
-                          }
-                      ),
+        h(NPopconfirm,
+                {onPositiveClick: () => handleDelete(row)},
+                {
+                  trigger: () => withDirectives( h(
+                      NButton,
+                      {
+                        size: 'small',
+                        type: 'error',
+                        style: 'margin-right: 8px;',
+                      },
+                      {
+                        default: () => '删除',
+                        icon: renderIcon('material-symbols:delete-outline', {size: 16}),
+                      }
+                  ),
                       [[vPermission, 'button:policy_delete']]
                   ),
-              default: () => h('div', {}, '确定删除该权限吗?'),
-            }
-        )
-      ]
+                  default: () => h('div', {}, '确定删除该权限吗?')
+                }
+            ),
+      ];
     },
   },
-]
-
-const handelSyncResourcePoliciesEvent = () => {
-  resourcePoliciesCurd.api.updateCacheAll().then((res) => {
-    window.$message.success('同步成功')
-  }).catch((err) => {
-    window.$message.error('同步失败')
-  })
-}
-
+];
 </script>
 
 <template>
   <CommonPage show-footer title="访问策略列表">
     <template #action>
-      <NSpace>
-        <NButton v-permission="'button:policy_create'" type="primary" @click="handelSyncResourcePoliciesEvent">
-          <TheIcon icon="material-symbols:sync" :size="18" class="mr-5"/> 立即生效
+      <NFlex>
+        <NButton v-permission="'button:policy_create'" type="primary" @click="handleSyncPolicies" :loading="isSyncing">
+          <TheIcon icon="material-symbols:sync" :size="18" class="mr-5"/>
+          立即生效
         </NButton>
-        <NButton v-permission="'button:policy_create'" type="primary" @click="resourcePoliciesCurd.handleAdd">
-          <TheIcon icon="material-symbols:add" :size="18" class="mr-5" />新建策略
+        <NButton v-permission="'button:policy_create'" type="primary" @click="handleAdd">
+          <TheIcon icon="material-symbols:add" :size="18" class="mr-5"/>
+          新建策略
         </NButton>
-      </NSpace>
+      </NFlex>
     </template>
 
     <CrudTable
-        ref="$table"
-        v-model:query-items="resourcePoliciesCurd.state.searchParams"
         :columns="columns"
-        :pagination="resourcePoliciesCurd.state.pagination"
-        :get-data="resourcePoliciesCurd.loadData"
+        :data="policies"
+        :loading="isTableLoading"
+        :pagination="pagination"
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
+        @search="handleSearch"
+        @reset="handleResetSearch"
     >
       <template #queryBar>
         <NFlex>
-        <QueryBarItem label="注释" :label-width="50">
-          <NInput
-              v-model:value="resourcePoliciesCurd.state.searchParams.name"
-              clearable
-              type="text"
-              @keypress.enter="$table?.handleSearch()"
-          />
-        </QueryBarItem>
-        <QueryBarItem label="效果" :label-width="50">
-          <NSelect
-              min-w-sm
-              v-model:value="resourcePoliciesCurd.state.searchParams.effect"
-              :options="[{label: '允许', value: 'permit'}, {label: '禁止', value: 'forbid'}]"
-              clearable
-          />
-        </QueryBarItem>
-        <QueryBarItem label="状态" :label-width="50">
-          <NSelect
-              min-w-sm
-              v-model:value="resourcePoliciesCurd.state.searchParams.is_active"
-              :options="[{label: '已启用', value: 1}, {label: '未启用', value: 0}]"
-              clearable
-          />
-        </QueryBarItem>
+          <NFlex>
+            <QueryBarItem label="注释" :label-width="50">
+              <NInput
+                  v-model:value="queryParams.name"
+                  clearable
+                  type="text"
+                  @keypress.enter="handleSearch()"
+              />
+            </QueryBarItem>
+            <QueryBarItem label="效果" :label-width="50">
+              <NSelect
+                  min-w-sm
+                  v-model:value="queryParams.effect"
+                  :options="[{label: '允许', value: 'permit'}, {label: '禁止', value: 'forbid'}]"
+                  clearable
+              />
+            </QueryBarItem>
+            <QueryBarItem label="状态" :label-width="50">
+              <NSelect
+                  min-w-sm
+                  v-model:value="queryParams.is_active"
+                  :options="[{label: '已启用', value: 1}, {label: '未启用', value: 0}]"
+                  clearable
+              />
+            </QueryBarItem>
+          </NFlex>
         </NFlex>
       </template>
     </CrudTable>
 
     <CrudModal
-        v-model:visible="resourcePoliciesCurd.state.modalVisible"
-        :title="resourcePoliciesCurd.state.modalTitle"
-        :loading="resourcePoliciesCurd.state.loading"
-        @save="resourcePoliciesCurd.handleSave"
+        v-model:visible="showModal"
+        :title="modalTitle"
+        :loading="isSubmitting"
+        @save="handleSave"
     >
       <NForm
           label-placement="left"
           label-align="left"
           :label-width="80"
-          :model="resourcePoliciesCurd.state.currentItem"
-          :disabled="resourcePoliciesCurd.state.modalType === 'view'"
+          :model="currentItem"
+          :disabled="modalType === 'view'"
       >
         <NFormItem label="策略内容" path="policy_text" required>
           <NInput
               type="textarea"
-              v-model:value="resourcePoliciesCurd.state.currentItem.policy_text"
+              v-model:value="currentItem.policy_text"
           />
         </NFormItem>
         <NFormItem label="描述" path="description" required>
           <NInput
-              v-model:value="resourcePoliciesCurd.state.currentItem.description"
+              v-model:value="currentItem.description"
           />
         </NFormItem>
         <NFormItem label="状态" path="is_active">
-          <NSwitch :value="resourcePoliciesCurd.state.currentItem.is_active"
+          <NSwitch :value="currentItem.is_active"
                    :default-value="true">
             <template #checked>
               启用
@@ -243,3 +295,5 @@ const handelSyncResourcePoliciesEvent = () => {
     </CrudModal>
   </CommonPage>
 </template>
+
+  

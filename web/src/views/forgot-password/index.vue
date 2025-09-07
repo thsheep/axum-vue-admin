@@ -3,7 +3,7 @@ import AppPage from '@/components/page/AppPage.vue'
 import bgImg from '@/assets/images/login_bg.webp'
 import { useI18n } from 'vue-i18n'
 import {authApi} from '@/composables/auth'
-import {useAppStore} from "@/store";
+import {useAppStore} from "@/stores";
 
 const appStore = useAppStore()
 

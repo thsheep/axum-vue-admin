@@ -1,10 +1,13 @@
-use chrono::{NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use sea_orm::FromQueryResult;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 use crate::entity::users::Model as UserModel;
+
+// 定义个userid的别名类型，万一后面切换为uuid呢...
+pub type UserID = i32;
 
 fn default_page() -> u64 {
     1
@@ -24,6 +27,7 @@ pub struct QueryParams {
     pub username: Option<String>,
     pub email: Option<String>,
     pub dept_id: Option<u64>,
+    pub fields: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate, ToSchema)]

@@ -2,7 +2,7 @@ import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router
 import { setupRouterGuard } from './guard'
 import {asyncRoutes, basicRoutes, EMPTY_ROUTE} from './routes'
 import {hasPermission} from "@/directives/permission";
-import {useUserStore} from "@/store";
+import {useUserStore} from "@/stores";
 
 const isHash = import.meta.env.VITE_USE_HASH === 'true'
 

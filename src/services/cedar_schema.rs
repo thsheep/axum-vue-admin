@@ -26,7 +26,7 @@ impl CedarSchemaService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user,
+                current_user.user_id,
                 context,
                 AuthAction::ViewPolicy,
                 ResourceType::Policy(None),
@@ -58,7 +58,7 @@ impl CedarSchemaService {
         self.app_state
         .auth_service
         .check_permission(
-            current_user,
+            current_user.user_id,
             context,
             AuthAction::UpdatePolicy,
             ResourceType::Policy(None),

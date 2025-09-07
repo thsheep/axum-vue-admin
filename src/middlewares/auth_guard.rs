@@ -37,6 +37,7 @@ pub async fn auth_guard_middleware(
 
         let current_user = CurrentUser {
             user_id: payload.sub,
+            dept_id: payload.dept_id,
             username: payload.name,
             is_super_admin: payload.is_super_admin,
         };

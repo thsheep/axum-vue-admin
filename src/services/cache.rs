@@ -15,7 +15,7 @@ const DEFAULT_REDIS_TTL_SECS: u64 = 3600; // 1 hour
 #[derive(Clone)]
 pub struct CacheService {
     redis_client: RedisClient,
-    local_cache: Cache<String, Entities>,
+    local_cache: Cache<String, String>,
     schema: Arc<RwLock<Schema>>,
 }
 
@@ -35,17 +35,18 @@ impl CacheService {
 
     pub async fn get_entities(&self, cache_key: String) -> Result<Option<Entities>, AppError> {
 
-        // 1. 尝试从本地缓存获取
-        if let Some(entities) = self.local_cache.get(&cache_key).await {
+        if let Some(cache_value) = self.local_cache.get(&cache_key).await {
             // debug!("在本地缓存中找到的用户实体[UserID:{}]", user_id);
+            let schema = self.schema.read().await;
+            let entities = Entities::from_json_str(&cache_value, Some(&*schema))?;
             return Ok(Some(entities));
         }
 
-        // 2. 从Redis获取
         match self.get_from_redis(&cache_key).await {
-            Ok(Some(entities)) => {
-                // 存入本地缓存
-                self.local_cache.insert(cache_key.clone(), entities.clone()).await;
+            Ok(Some(cache_value)) => {
+                let schema = self.schema.read().await;
+                let entities = Entities::from_json_str(&cache_value, Some(&*schema))?;
+                self.local_cache.insert(cache_key.clone(), cache_value).await;
                 debug!("从 Redis 加载实体[CacheKey:{}]并缓存在本地", cache_key);
                 Ok(Some(entities))
             }
@@ -64,32 +65,13 @@ impl CacheService {
         &self,
         cache_key: String,
         entities: Entities,
-        ttl_secs: Option<u64>,
     ) -> Result<(), AppError> {
-        /*
-            非必要情况下，应该为每次缓存设置一个TTL.
-            ttl_secs 应该大于 DEFAULT_LOCAL_TTL_SECS(这是本地缓存的时间) 值
-        */
         // 解析实体以验证格式并存入本地缓存
         let schema = self.schema.read().await;
         let parsed_entities = Entities::from_entities(entities, Some(&schema))?;
         let entities_json_str = entities2json(&parsed_entities)?;
-        // 异步更新两个缓存层
-        let redis_result = self.set_to_redis(&cache_key, entities_json_str.as_str(), ttl_secs).await;
-        self.local_cache
-            .insert(cache_key.clone(), parsed_entities)
-            .await;
-
-        match redis_result {
-            Ok(_) => {
-                debug!("实体[{}]缓存成功", cache_key);
-                Ok(())
-            }
-            Err(e) => {
-                error!("无法将实体[{}]缓存到 Redis：{}", cache_key, e);
-                Ok(())
-            }
-        }
+        self.set_cache(cache_key, entities_json_str.as_str(), None).await?;
+        Ok(())
     }
     
     pub async fn invalidate_user_entities(&self, cache_key: String) -> Result<(), AppError> {
@@ -122,18 +104,45 @@ impl CacheService {
         }
     }
 
-    async fn get_from_redis(&self, key: &str) -> Result<Option<Entities>, AppError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        let entities_json: Option<String> = conn.get(key).await?;
+    pub async fn get_cache(&self, cache_key: &str) -> Result<Option<String>, AppError> {
 
-        match entities_json {
-            Some(json) => {
-                let schema = self.schema.read().await;
-                let entities = Entities::from_json_str(&json, Some(&*schema))?;
-                Ok(Some(entities))
-            }
-            None => Ok(None),
+        if let Some(cache) = self.local_cache.get(cache_key).await {
+                return Ok(Some(cache));
         }
+
+        if let Some(cache) = self.get_from_redis(cache_key).await? {
+            return Ok(Some(cache));
+        }
+
+        Ok(None)
+    }
+
+    /*
+       非必要情况下，应该为每次缓存设置一个TTL.
+       ttl_secs 应该大于 DEFAULT_LOCAL_TTL_SECS(这是本地缓存的时间) 值
+    */
+    pub async fn set_cache(&self, cache_key: String, cache_value: &str, ttl_secs: Option<u64>) -> Result<(), AppError> {
+        let redis_result = self.set_to_redis(&cache_key, cache_value, ttl_secs).await;
+        self.local_cache
+            .insert(cache_key.clone(), cache_value.to_string())
+            .await;
+
+        match redis_result {
+            Ok(_) => {
+                debug!("实体[{}]缓存成功", cache_key);
+                Ok(())
+            }
+            Err(e) => {
+                error!("无法将实体[{}]缓存到 Redis：{}", cache_key, e);
+                Ok(())
+            }
+        }
+    }
+
+    async fn get_from_redis(&self, key: &str) -> Result<Option<String>, AppError> {
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let cache: Option<String> = conn.get(key).await?;
+        Ok(cache)
     }
 
     async fn set_to_redis(&self, key: &str, value: &str, ttl_secs: Option<u64>) -> Result<(), AppError> {

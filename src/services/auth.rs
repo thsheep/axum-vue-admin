@@ -9,7 +9,7 @@ use crate::entity::{
 };
 use crate::errors::app_error::AppError;
 use crate::schemas::auth::{AuthResponse, Claims, Credentials, TokenType};
-use crate::services::user::UserService;
+use crate::services::user::{get_user_entities, UserService};
 use crate::utils::{
     jwt::{create_access_token, decode_token},
     crypto::verify_password,
@@ -77,6 +77,7 @@ impl AuthService {
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: user.username.clone(),
+            dept_id: user.dept_id,
             token_type: TokenType::Access,
             is_super_admin,
         };
@@ -89,6 +90,7 @@ impl AuthService {
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: user.username.clone(),
+            dept_id: user.dept_id,
             token_type: TokenType::Refresh,
             is_super_admin,
         };
@@ -157,6 +159,7 @@ impl AuthService {
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: refresh_claims.name.clone(),
+            dept_id: refresh_claims.dept_id,
             token_type: TokenType::Access,
             is_super_admin: refresh_claims.is_super_admin,
         };
@@ -179,6 +182,7 @@ impl AuthService {
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: refresh_claims.name.clone(),
+            dept_id: refresh_claims.dept_id,
             token_type: TokenType::Refresh,
             is_super_admin: refresh_claims.is_super_admin,
         };
@@ -243,10 +247,11 @@ impl AuthService {
     // 当前用户的 Entities 不应该过期; 不然速度太慢了.
     async fn cache_user_entities(&self, user_id: i32) -> Result<(), AppError> {
         let cache_key = format!("{}:{}", USER_ENTITIES_CACHE_PREFIX, user_id);
-        let user_entities = self.user_service.get_user_entities(user_id).await?;
+        let schema = self.app_state.auth_service.get_schema_copy().await;
+        let user_entities = get_user_entities(&self.app_state.db, user_id, &schema).await?;
         self.app_state
             .cache_service
-            .cache_entities(cache_key, user_entities, None)
+            .cache_entities(cache_key, user_entities)
             .await?;
 
         Ok(())

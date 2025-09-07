@@ -1,5 +1,5 @@
 <script setup>
-import {h, onMounted, ref, resolveDirective, withDirectives} from 'vue'
+import {h, onMounted, ref, reactive, resolveDirective, withDirectives, computed} from 'vue'
 import {
   NButton,
   NForm,
@@ -7,74 +7,110 @@ import {
   NInput,
   NPopconfirm,
   NTag,
-  NTree,
-  NDrawer,
-  NDrawerContent,
-  NTabs,
-  NTabPane,
-  NGrid,
-  NGi,
 } from 'naive-ui'
+import {storeToRefs} from 'pinia'
+import {useRoleStore} from '@/stores'
+import {formatDate, renderIcon} from '@/utils'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
 import CrudModal from '@/components/table/CrudModal.vue'
 import CrudTable from '@/components/table/CrudTable.vue'
-
-import {formatDate, renderIcon} from '@/utils'
-import {useRoleCrud } from '@/composables'
 import TheIcon from '@/components/icon/TheIcon.vue'
+
+const $message = window.$message
 
 defineOptions({name: '角色管理'})
 
-const $table = ref(null)
+// =============================
+const roleStore = useRoleStore()
+const {roles, pagination, isTableLoading} = storeToRefs(roleStore)
 const vPermission = resolveDirective('permission')
 
-const roleCrud = useRoleCrud({refresh: () => $table.value?.handleSearch()})
+const showModal = ref(false)
+const modalType = ref('create') // 'create' | 'edit'
+const modalTitle = computed(() => (modalType.value === 'create' ? '新建角色' : '编辑角色'))
+const currentItem = ref({}) // 用于表单 v-model 绑定
+const isSubmitting = ref(false)
 
-const pattern = ref('')
-const active = ref(false)
-const role_id = ref(0)
-const permissionSlugs = ref([])
-const refPermissionTree = ref([])
-const permissionTree = ref([])
-const roleNameOptions = ref([])
+// 搜索参数
+const queryParams = reactive({})
 
 
-onMounted(() => {
-  $table.value?.handleSearch()
-  roleCrud.loadData({pageSize: 999, fields: 'id,name'}).then((response) => {
-    roleNameOptions.value = response.data.map(item => {
-      return {
-        label: item.name,
-        value: item.id
-      }
-    })
+const loadData = () => {
+  roleStore.fetchRoles({
+    ...queryParams,
+    page: pagination.value.page,
+    pageSize: pagination.value.pageSize,
   })
-})
-
-
-function buildPermissionTree(data) {
-  const processedData = []
-  const groupedData = {}
-
-  data.forEach((item) => {
-    const module = item['module']
-    const slug = item['slug']
-    if (!(module in groupedData)) {
-      groupedData[module] = {key: module, label: module, children: []}
-    }
-
-    groupedData[module].children.push({
-      id: item['id'],
-      label: item['name'],
-      key: slug,
-    })
-  })
-  processedData.push(...Object.values(groupedData))
-  return processedData
+      .catch(error => {
+        $message.error(`加载角色失败: ${error.message}`)
+      })
 }
 
+onMounted(() => {
+  loadData()
+});
+
+const handleSearch = () => {
+  pagination.value.page = 1
+  loadData()
+}
+
+const handleResetSearch = () => {
+  for (const key in queryParams) {
+    delete queryParams[key]
+  }
+  handleSearch()
+}
+
+const handlePageChange = (page) => {
+  loadData(page, pagination.value.pageSize);
+}
+
+const handlePageSizeChange = (pageSize) => {
+  loadData(1, pageSize);
+}
+
+// CRUD 操作
+const handleAdd = () => {
+  currentItem.value = {}
+  modalType.value = 'create'
+  showModal.value = true
+}
+
+const handleEdit = (row) => {
+  currentItem.value = {...row}
+  modalType.value = 'edit'
+  showModal.value = true
+}
+
+const handleSave = async () => {
+  isSubmitting.value = true
+  try {
+    if (modalType.value === 'create') {
+      await roleStore.createRole(currentItem.value)
+      $message.success('创建成功')
+    } else {
+      await roleStore.updateRole(currentItem.value.id, currentItem.value)
+      $message.success('更新成功')
+    }
+    showModal.value = false
+  } catch (error) {
+    $message.error(`保存失败: ${error.message}`)
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await roleStore.deleteRole(row.id)
+    $message.success('删除成功')
+  } catch (error) {
+    $message.error(`删除失败: ${error.message}`)
+  }
+}
 
 const columns = [
   {
@@ -83,9 +119,7 @@ const columns = [
     width: 80,
     align: 'center',
     ellipsis: {tooltip: true},
-    render(row) {
-      return h(NTag, {type: 'info'}, {default: () => row.name})
-    },
+    render: (row) => h(NTag, {type: 'info'}, {default: () => row.name}),
   },
   {
     title: '角色描述',
@@ -98,63 +132,39 @@ const columns = [
     key: 'created_at',
     width: 60,
     align: 'center',
-    render(row) {
-      return h('span', formatDate(row.created_at))
-    },
+    render: (row) => h('span', formatDate(row.created_at)),
   },
   {
     title: '操作',
     key: 'actions',
-    width: 80,
+    width: 180,
     align: 'center',
     fixed: 'right',
     render(row) {
       return [
         withDirectives(
-            h(
-                NButton,
-                {
+            h(NButton, {
                   size: 'small',
                   type: 'primary',
                   style: 'margin-right: 8px;',
-                  onClick: () => {
-                    roleCrud.handleEdit(row)
-                  },
+                  onClick: () => handleEdit(row),
                 },
-                {
-                  default: () => '编辑',
-                  icon: renderIcon('material-symbols:edit-outline', {size: 16}),
-                }
-            ),
+                {default: () => '编辑', icon: renderIcon('material-symbols:edit-outline', {size: 16})}),
             [[vPermission, 'button:role_update']]
         ),
-        h(
-            NPopconfirm,
+        h(NPopconfirm,
+            {onPositiveClick: () => handleDelete(row)},
             {
-              onPositiveClick: () => roleCrud.handleDelete({id: row.id}, false),
-              onNegativeClick: () => {
-              },
-            },
-            {
-              trigger: () =>
-                  withDirectives(
-                      h(
-                          NButton,
-                          {
-                            size: 'small',
-                            type: 'error',
-                            style: 'margin-right: 8px;',
-                          },
-                          {
-                            default: () => '删除',
-                            icon: renderIcon('material-symbols:delete-outline', {size: 16}),
-                          }
-                      ),
-                      [[vPermission, 'button:role_delete']]
-                  ),
-              default: () => h('div', {}, '确定删除该角色吗?'),
-            }
-        ),
+              trigger: () => withDirectives(
+                  h(NButton, {
+                        size: 'small',
+                        type: 'error',
+                      },
+                      {default: () => '删除', icon: renderIcon('material-symbols:delete-outline', {size: 16})}),
+                  [[vPermission, 'button:role_delete']]
+              ),
+              default: () => '确定删除该角色吗?',
+            }),
       ]
     },
   },
@@ -164,62 +174,59 @@ const columns = [
 <template>
   <CommonPage show-footer title="角色列表">
     <template #action>
-      <NButton v-permission="'button:role_create'" type="primary" @click="roleCrud.handleAdd">
+      <NButton v-permission="'button:role_create'" type="primary" @click="handleAdd">
         <TheIcon icon="material-symbols:add" :size="18" class="mr-5"/>
         新建角色
       </NButton>
     </template>
 
+    <!-- 使用重构后的 CrudTable -->
     <CrudTable
-        ref="$table"
-        :query-items="roleCrud.state.searchParams"
         :columns="columns"
-        :get-data="roleCrud.loadData"
-        :pagination="roleCrud.state.pagination"
+        :data="roles"
+        :loading="isTableLoading"
+        :pagination="pagination"
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
+        @reset="handleResetSearch"
+        @search="handleSearch"
     >
       <template #queryBar>
         <QueryBarItem label="角色名" :label-width="50">
           <NInput
-              v-model:value="roleCrud.state.searchParams.role_name"
+              v-model:value="queryParams.role_name"
               clearable
               type="text"
               placeholder="请输入角色名"
-              @keypress.enter="$table?.handleSearch()"
+              @keypress.enter="handleSearch"
           />
         </QueryBarItem>
       </template>
     </CrudTable>
 
     <CrudModal
-        v-model:visible="roleCrud.state.modalVisible"
-        :title="roleCrud.state.modalTitle"
-        :loading="roleCrud.state.loading"
-        @save="roleCrud.handleSave"
+        v-model:visible="showModal"
+        :title="modalTitle"
+        :loading="isSubmitting"
+        @save="handleSave"
     >
       <NForm
-          ref="modalFormRef"
           label-placement="left"
           label-align="left"
           :label-width="80"
-          :model="roleCrud.state.currentItem"
-          :disabled="roleCrud.state.modalType === 'view'"
+          :model="currentItem"
       >
         <NFormItem
             label="角色名"
             path="name"
-            :rule="{
-            required: true,
-            message: '请输入角色名称',
-            trigger: ['input', 'blur'],
-          }"
+            :rule="{ required: true, message: '请输入角色名称', trigger: ['input', 'blur'] }"
         >
-          <NInput v-model:value="roleCrud.state.currentItem.name"/>
+          <NInput v-model:value="currentItem.name"/>
         </NFormItem>
         <NFormItem label="角色描述" path="description">
-          <NInput v-model:value="roleCrud.state.currentItem.description"/>
+          <NInput v-model:value="currentItem.description"/>
         </NFormItem>
       </NForm>
     </CrudModal>
-
   </CommonPage>
 </template>

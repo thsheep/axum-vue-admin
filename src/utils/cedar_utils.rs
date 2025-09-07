@@ -22,6 +22,7 @@ pub const  ENTITY_TYPE_DEPARTMENT: &str = "Department";
 pub const  ENTITY_TYPE_POLICY: &str = "Policy";
 
 pub const  ENTITY_TYPE_ROBOT: &str = "Robot";
+pub const  ENTITY_TYPE_ROBOT_ACCOUNT: &str = "RobotAccount";
 
 pub const  ENTITY_ATTR_NAME: &str = "name";
 pub const ENTITY_ATTR_OWNERS: &str = "owners";
@@ -56,7 +57,20 @@ pub enum AuthAction {
     ViewPolicy,
     CreatePolicy,
     UpdatePolicy,
-    DeletePolicy
+    DeletePolicy,
+    
+    // Robot
+    ViewRobot,
+    CreateRobot,
+    UpdateRobot,
+    DeleteRobot,
+    StartRobot,
+    StopRobot,
+    ShareRobot,
+    ViewRobotAccount,
+    CreateRobotAccount,
+    UpdateRobotAccount,
+    DeleteRobotAccount,
 }
 
 impl AuthAction {
@@ -88,6 +102,18 @@ impl AuthAction {
             AuthAction::CreatePolicy => r#"Action::"CreatePolicies""#,
             AuthAction::UpdatePolicy => r#"Action::"UpdatePolicies""#,
             AuthAction::DeletePolicy => r#"Action::"DeletePolicies""#,
+            //
+            AuthAction::ViewRobot => r#"Action::"ViewRobot""#,
+            AuthAction::CreateRobot => r#"Action::"CreateRobot""#,
+            AuthAction::UpdateRobot => r#"Action::"UpdateRobot""#,
+            AuthAction::DeleteRobot => r#"Action::"DeleteRobot""#,
+            AuthAction::StartRobot => r#"Action::"StartRobot""#,
+            AuthAction::StopRobot => r#"Action::"StopRobot""#,
+            AuthAction::ShareRobot => r#"Action::"ShareRobot""#,
+            AuthAction::ViewRobotAccount => r#"Action::"ViewRobotAccount""#,
+            AuthAction::CreateRobotAccount => r#"Action::"CreateRobotAccount""#,
+            AuthAction::UpdateRobotAccount => r#"Action::"UpdateRobotAccount""#,
+            AuthAction::DeleteRobotAccount => r#"Action::"DeleteRobotAccount""#,
         }
     }
 }
@@ -100,6 +126,8 @@ pub enum ResourceType {
     Group(Option<i32>),     // Group::* 或 Group::{id}
     Role(Option<i32>),      // Role::* 或 Role::{id}
     Policy(Option<i32>), // CedarPolicy::*
+    Robot(Option<i32>),
+    RobotAccount(Option<i32>),
     UI(Option<String>),
     AuditLog,               // AuditLog::*
 }
@@ -119,7 +147,13 @@ impl ResourceType {
             ResourceType::Policy(None) => r#"Policy::"*""#.to_string(),
             ResourceType::AuditLog => r#"AuditLog::"*""#.to_string(),
             ResourceType::UI(Some(uid)) => format!(r#"UI::"{}""#, uid),
-            &ResourceType::UI(None) => r#"UI::"*""#.to_string()
+            &ResourceType::UI(None) => r#"UI::"*""#.to_string(),
+            
+            //
+            ResourceType::Robot(Some(id)) => format!(r#"Robot::"{}""#, id),
+            ResourceType::Robot(None) => r#"Robot::"*""#.to_string(),
+            ResourceType::RobotAccount(Some(id)) => format!(r#"Robot::"{}""#, id),
+            ResourceType::RobotAccount(None) => r#"Robot::"*""#.to_string(),
         };
 
         EntityUid::from_str(&uid_str).map_err(|e| forbidden!(format!("Wrong entity UID: {}", e)))
@@ -128,7 +162,7 @@ impl ResourceType {
 
 /// 授权检查构建器
 pub struct AuthorizationBuilder {
-    current_user: CurrentUser,
+    user_id: i32,
     context: CedarContext,
     action: AuthAction,
     resource: ResourceType,
@@ -136,9 +170,9 @@ pub struct AuthorizationBuilder {
 }
 
 impl AuthorizationBuilder {
-    pub fn new(current_user: CurrentUser, context: CedarContext) -> Self {
+    pub fn new(user_id: i32, context: CedarContext) -> Self {
         Self {
-            current_user,
+            user_id,
             context,
             action: AuthAction::ViewUser, // 默认值
             resource: ResourceType::User(None), // 默认值
@@ -161,8 +195,8 @@ impl AuthorizationBuilder {
         self
     }
 
-    pub fn build(self) -> Result<(Request, String, Entities), AppError> {
-        let principal_str = format!(r#"User::"{}""#, self.current_user.user_id);
+    pub fn build(self) -> Result<(Request, Entities), AppError> {
+        let principal_str = format!(r#"User::"{}""#, self.user_id);
         let principal = EntityUid::from_str(principal_str.as_str())?;
         let action = EntityUid::from_str(self.action.as_str())?;
         let resource = self.resource.as_entity_uid()?;
@@ -171,7 +205,7 @@ impl AuthorizationBuilder {
         let request = Request::new(principal, action, resource, context, None)?;
         debug!("Request: {:?}", request);
 
-        Ok((request, self.current_user.username, self.resource_entities))
+        Ok((request, self.resource_entities))
     }
 }
 

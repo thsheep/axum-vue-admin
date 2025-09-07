@@ -4,7 +4,7 @@
       <n-card rounded-10>
         <div flex items-center justify-between>
           <div flex items-center>
-            <img rounded-full width="60" :src="userStore.avatar" />
+            <img rounded-full width="60" :src="userStore.avatar"  alt=""/>
             <div ml-10>
               <p text-20 font-semibold>
                 {{ $t('views.workbench.text_hello', { username: userStore.name }) }}
@@ -46,8 +46,9 @@
 </template>
 
 <script setup>
-import { useUserStore } from '@/store'
+import { useUserStore } from '@/stores'
 import { useI18n } from 'vue-i18n'
+import AppPage from "@/components/page/AppPage.vue";
 
 const dummyText = '一个基于 Axum、SeaORM、Cedar Policy、Vue3.0、Naive UI 的轻量级后台管理模板'
 const { t } = useI18n({ useScope: 'global' })
