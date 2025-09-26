@@ -28,7 +28,7 @@ pub struct QueryParams {
 #[derive(Default, Debug, Serialize, Deserialize, FromQueryResult, ToSchema)]
 pub struct GroupResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,
+    pub uuid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,7 +42,7 @@ pub struct GroupResponse {
 impl From<GroupModel> for GroupResponse {
     fn from(group: GroupModel) -> Self {
         Self {
-            id: Some(group.user_group_id),
+            uuid: Some(group.user_group_uuid),
             name: Some(group.name),
             description: group.description,
             created_at: Some(group.created_at),
@@ -62,17 +62,17 @@ pub struct CreateGroupDto {
 
 #[derive(Default, Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct AssignUsersDto {
-    pub user_ids: Vec<i32>,
+    pub user_uuids: Vec<String>,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct AssignRolesDto {
-    pub role_id: i32,
+    pub role_uuid: String,
 }
 
 
 #[derive(Default, Debug, Serialize, Deserialize, ToSchema, FromQueryResult, Validate)]
 pub struct GroupRoleResponse {
-    pub id: i32,
+    pub uuid: String,
     pub name: String,
 }

@@ -43,7 +43,7 @@ pub struct UpdateRoleDto {
 #[derive(Debug, Serialize, Deserialize, FromQueryResult, ToSchema)]
 pub struct RoleFieldResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,
+    pub uuid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
@@ -52,7 +52,7 @@ pub struct RoleFieldResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema, FromQueryResult)]
 pub struct RoleResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,
+    pub uuid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,7 +64,7 @@ pub struct RoleResponse {
 impl From<RoleModel> for RoleResponse {
     fn from(role: RoleModel) -> Self {
         Self {
-            id: Some(role.role_id),
+            uuid: Some(role.role_uuid),
             created_at: Some(role.created_at),
             name: Some(role.role_name),
             description: role.description,

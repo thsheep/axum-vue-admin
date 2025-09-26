@@ -1,14 +1,15 @@
 use crate::config::app::REDIS_PUB_SUB_CHANNEL;
 use crate::config::state::AppState;
-use crate::entity::{cedar_policy_set, cedar_schema};
+use crate::entity::{cedar_policy_set, cedar_schema, template_links};
 use crate::errors::app_error::AppError;
-use cedar_policy::{Policy, PolicyId, PolicySet, Schema};
+use cedar_policy::{Policy, PolicyId, PolicySet, Schema, Template};
 use futures_util::StreamExt as _;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect};
 use std::str::FromStr;
 
 use tokio::time::{Duration, sleep};
 use tracing::{error, info, warn};
+use crate::schemas::cedar_policy::TemplateLinkRecord;
 
 const MAX_RETRY_ATTEMPTS: u32 = 3;
 const RETRY_DELAY: Duration = Duration::from_secs(5);
@@ -29,6 +30,10 @@ pub fn default_true() -> bool {
 
 pub fn default_false() -> bool {
     false
+}
+
+pub fn default_number_1() -> i8 {
+    1
 }
 
 
@@ -101,17 +106,26 @@ async fn establish_subscription(state: &AppState) -> Result<(), AppError> {
 }
 
 pub async fn reload_policies_and_schema(state: &AppState) -> Result<(), AppError> {
-    // 并发加载策略和Schema
-    let (policies_result, schema_result) = tokio::join!(
-        load_active_policies(&state.db),
-        load_active_schema(&state.db)
+    info!("从数据库重新加载所有 Cedar 策略、模板、链接和模式...");
+
+    let (policies_result,
+        schema_result,
+        links_result
+    ) = tokio::join!(
+        load_active_policies_and_templates(&state.db),
+        load_active_schema(&state.db),
+        load_all_template_links(&state.db)
     );
 
     let new_policies = policies_result?;
     let new_schema = schema_result?;
-    state.auth_service.update_policies(new_policies).await?;
-    state.auth_service.update_schema(new_schema).await?;
-    info!("成功重新加载Cedar策略和Schema");
+    let new_links = links_result?;
+
+    state.auth_service.update_schema(new_schema).await;
+
+    state.auth_service.update_policies_and_templates_in_cache(&new_policies).await?;
+    state.auth_service.update_template_link_records_in_cache(&new_links).await?;
+
     Ok(())
 }
 
@@ -138,25 +152,55 @@ pub async fn load_active_schema(db: &DatabaseConnection) -> Result<Schema, AppEr
     }
 }
 
-pub async fn load_active_policies(db: &DatabaseConnection) -> Result<PolicySet, AppError> {
-    info!("从数据库加载有效的 Cedar policies...");
+pub async fn load_active_policies_and_templates(db: &DatabaseConnection) -> Result<PolicySet, AppError> {
+    info!("从数据库加载活动的 Cedar 策略和模板...");
     let active_policy_models = cedar_policy_set::Entity::find()
         .filter(cedar_policy_set::Column::IsActive.eq(true))
         .all(db)
         .await?;
 
     if active_policy_models.is_empty() {
-        warn!("警告：未找到有效策略。从空策略集开始。");
+        warn!("未找到有效的策略或模板。从空的策略集开始。");
         return Ok(PolicySet::new());
     }
+    info!(
+        "已成功重新加载并缓存 {} 个策略/模板",
+        active_policy_models.len()
+    );
+    let mut policy_set = PolicySet::new();
 
-    let mut policies = PolicySet::new();
-
-    for policy_model in active_policy_models {
-        let policy_id = PolicyId::from_str(policy_model.policy_str_id.as_str())?;
-        let policy = Policy::parse(Some(policy_id), policy_model.policy_text.as_str())?;
-        policies.add(policy)?;
+    for model in active_policy_models {
+        let policy_id = PolicyId::from_str(model.policy_uuid.as_str())?;
+        if let Ok(template) = Template::parse(Some(policy_id.clone()), &model.policy_text) {
+            policy_set.add_template(template)?;
+        } else {
+            let policy = Policy::parse(Some(policy_id), &model.policy_text.as_str())?;
+            policy_set.add(policy)?;
+        }
     }
 
-    Ok(policies)
+    Ok(policy_set)
+}
+
+
+pub async fn load_all_template_links(db: &DatabaseConnection) -> Result<Vec<TemplateLinkRecord>, AppError> {
+    info!("从数据库加载所有模板链接...");
+    let link_models = template_links::Entity::find().all(db).await?;
+
+    let link_records = link_models
+        .into_iter()
+        .map(|model| {
+            Ok(TemplateLinkRecord {
+                link_uuid: model.link_uuid.parse()?,
+                template_uuid: model.template_uuid.parse()?,
+                principal_uid: model.principal_uid.parse()?,
+                resource_uid: model.resource_uid.parse()?,
+            })
+        })
+        .collect::<Result<Vec<TemplateLinkRecord>, AppError>>()?;
+    info!(
+        "已成功重新加载并缓存 {} 个模板链接",
+        link_records.len()
+    );
+    Ok(link_records)
 }

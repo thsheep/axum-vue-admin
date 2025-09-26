@@ -9,7 +9,7 @@ pub struct Model {
     pub id: i64,
     pub created_at: DateTime,
     pub updated_at: DateTime,
-    pub user_id: i32,
+    pub user_id: String,
     pub username: String,
     pub module: String,
     pub summary: String,

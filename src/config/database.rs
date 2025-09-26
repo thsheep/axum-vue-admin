@@ -1,7 +1,6 @@
 // # 数据库配置
 
 use serde::{Deserialize, Serialize};
-use tracing::log;
 use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]

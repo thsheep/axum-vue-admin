@@ -40,6 +40,7 @@ export function addDynamicRoutes() {
     return
   }
   // 有uiPolicies的情况
+  console.log("uiPolicies:", uiPolicies)
   let accessibleRoutes = filterAccessibleRoutes(asyncRoutes, uiPolicies)
   accessibleRoutes.forEach((route) => {
     router.addRoute(route)
@@ -60,7 +61,7 @@ function getRouteName(route) {
 }
 
 
-function filterAccessibleRoutes(routesToFilter, userPermissions) { //
+function filterAccessibleRoutes(routesToFilter, uiPolicies) { //
   const accessibleRoutes = [];
 
   routesToFilter.forEach(route => {
@@ -69,7 +70,7 @@ function filterAccessibleRoutes(routesToFilter, userPermissions) { //
     let hasVisibleChildren = false;
     // 如果有子路由，则递归过滤
     if (tempRoute.children) {
-      tempRoute.children = filterAccessibleRoutes(tempRoute.children, userPermissions);
+      tempRoute.children = filterAccessibleRoutes(tempRoute.children, uiPolicies);
       if (tempRoute.children.length > 0) {
         hasVisibleChildren = true;
       }
@@ -79,8 +80,8 @@ function filterAccessibleRoutes(routesToFilter, userPermissions) { //
     const resource = tempRoute.meta?.resource;
     // 条件1: 它有可见的子路由（意味着它是一个需要显示的父菜单）
     // 条件2: 它本身就有权限被访问（适用于没有子路由的菜单项，或者父菜单本身也对应一个页面）
-    const hasAccess = !resource || userPermissions.includes(resource);
-
+    const hasAccess = !resource || uiPolicies.includes(resource);
+    console.log("resource: ", resource, hasAccess);
     if (hasVisibleChildren || hasAccess) {
       // 如果它没有子路由了，就没必要保留 children 属性
       if (!hasVisibleChildren) {

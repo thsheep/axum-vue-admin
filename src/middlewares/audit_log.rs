@@ -23,9 +23,9 @@ pub async fn handle_audit_log_middleware(
     let status = response.status().as_u16() as i32;
 
     let user_id = if let Some(user) = current_user {
-        user.user_id
+        user.uuid
     } else {
-        0
+        "0".to_string()
     };
 
     // 使用状态中的数据库连接

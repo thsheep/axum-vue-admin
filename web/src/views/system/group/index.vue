@@ -82,7 +82,7 @@ const handleSave = async () => {
       await store.createGroup(currentItem.value);
       $message.success('创建成功');
     } else {
-      await store.updateGroup(currentItem.value.id, currentItem.value);
+      await store.updateGroup(currentItem.value.uuid, currentItem.value);
       $message.success('更新成功');
     }
     showCrudModal.value = false;
@@ -95,7 +95,7 @@ const handleSave = async () => {
 
 const handleDelete = async (row) => {
   try {
-    await store.deleteGroup(row.id);
+    await store.deleteGroup(row.uuid);
     $message.success('删除成功');
   } catch (error) {
     $message.error(`删除失败: ${error.message}`);
@@ -104,10 +104,10 @@ const handleDelete = async (row) => {
 
 
 const handleSetRoles = async (row) => {
-  currentGroupId.value = row.id;
+  currentGroupId.value = row.uuid;
   try {
     // 请求当前用户组的角色，Store会更新 checkedRoleKeys
-    await store.fetchGroupRoles(row.id);
+    await store.fetchGroupRoles(row.uuid);
     showRoleDrawer.value = true;
   } catch (error) {
     $message.error(`获取角色信息失败: ${error.message}`);
@@ -305,6 +305,7 @@ const columns = [
                   cascade
                   :data="roleTreeOptions"
                   :pattern="roleFilterPattern"
+                  key-field="uuid"
                   :show-irrelevant-nodes="false"
                   :checked-keys="checkedRoleKeys"
                   @update:checked-keys="handleRoleCheckChange"

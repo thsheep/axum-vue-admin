@@ -15,6 +15,9 @@
 </template>
 
 <script setup>
+import {useRoute} from "vue-router";
+import AppPage from "@/components/page/AppPage.vue";
+
 defineProps({
   showFooter: {
     type: Boolean,

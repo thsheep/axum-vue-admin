@@ -7,6 +7,7 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub user_id: i32,
+    pub user_uuid: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
     #[sea_orm(unique)]
@@ -55,6 +56,7 @@ impl Related<super::departments::Entity> for Entity {
     }
 }
 
+
 impl Related<super::user_group_members::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserGroupMembers.def()
@@ -66,6 +68,7 @@ impl Related<super::user_roles::Entity> for Entity {
         Relation::UserRoles.def()
     }
 }
+
 
 impl Related<super::roles::Entity> for Entity {
     fn to() -> RelationDef {

@@ -7,8 +7,11 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub schema_id: i32,
+    pub schema_uuid: String,
     pub schema: String,
     pub description: String,
+    #[sea_orm(custom_type="i8")]
+    pub is_active: bool,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
 }

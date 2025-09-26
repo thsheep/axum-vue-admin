@@ -207,7 +207,8 @@ export const asyncRoutes = [
                     isHidden: false,
                     resource: "menus:policies_management",
                 }
-            },{
+            },
+            {
                 name: "CedarSchema管理",
                 path: "cedar_schema",
                 component: () => import('@/views/system/cedar_schema/index.vue'),
@@ -220,19 +221,19 @@ export const asyncRoutes = [
                     resource: "menus:policies_management",
                 }
             },
-            {
-                name: "审计日志",
-                path: "auditlog",
-                component: () => import('@/views/system/auditlog/index.vue'),
-                meta: {
-                    title: "审计日志",
-                    icon: "ph:clipboard-text-bold",
-                    order: 7,
-                    keepAlive: true,
-                    isHidden: false,
-                    resource: "menus:auditlog_management",
-                }
-            }
+            // {
+            //     name: "审计日志",
+            //     path: "auditlog",
+            //     component: () => import('@/views/system/auditlog/index.vue'),
+            //     meta: {
+            //         title: "审计日志",
+            //         icon: "ph:clipboard-text-bold",
+            //         order: 7,
+            //         keepAlive: true,
+            //         isHidden: false,
+            //         resource: "menus:auditlog_management",
+            //     }
+            // }
         ]
     },
     {

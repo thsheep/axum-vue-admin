@@ -13,6 +13,14 @@ pub const GROUP_TAG: &str = "Group";
 
 pub const CEDAR_POLICY_TAG: &str = "Cedar Policy";
 
+pub const ROBOT: &str = "Robot";
+
+pub const ROBOT_ACCOUNT: &str = "RobotAccount";
+
+pub const ROBOT_HISTORY: &str = "RobotHistory";
+
+pub const ROBOT_CLUSTER: &str = "RobotCluster";
+
 #[derive(OpenApi)]
 #[openapi(
     tags(

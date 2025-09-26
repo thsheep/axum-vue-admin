@@ -3,6 +3,7 @@ use crate::config::auth::{ACCESS_TOKEN_EXPIRATION, REFRESH_TOKEN_EXPIRATION};
 // 认证相关路由（登录、SSO等）
 use crate::config::state::AppState;
 use crate::entity::{
+    departments,
     roles::{Column as RoleColumn, Entity as RoleEntity, Relation as RoleRelation},
     user_roles::Column as UserRoleColumn,
     users::{ActiveModel as UserActiveModel, Column as UserColumn, Entity as UserEntity},
@@ -24,6 +25,7 @@ use cookie::{time::Duration as CookieDuration, SameSite};
 use redis::{AsyncCommands, RedisResult};
 use sea_orm::JoinType::InnerJoin;
 use sea_orm::{ActiveModelTrait, ColIdx, ColumnTrait, EntityTrait, ModelTrait, PaginatorTrait, QueryFilter, QuerySelect, QueryTrait, RelationTrait, Set};
+use crate::schemas::user::UserUUID;
 
 #[derive(Clone)]
 pub struct AuthService {
@@ -70,14 +72,22 @@ impl AuthService {
             .await?;
         let is_super_admin = is_super_admin > 0;
 
+        let dept_uuid = departments::Entity::find_by_id(user.dept_id)
+            .select_only()
+            .column(departments::Column::DeptUuid)
+            .into_tuple::<String>()
+            .one(&self.app_state.db)
+            .await?
+            .ok_or(not_found!("Not joined the department".to_string()))?;
+
         let expires = Utc::now() + Duration::seconds(ACCESS_TOKEN_EXPIRATION);
         let payload = Claims {
-            sub: user.user_id,
+            sub: user.user_uuid.clone(),
             jti: uuid::Uuid::new_v4(),
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: user.username.clone(),
-            dept_id: user.dept_id,
+            dept_id: dept_uuid.clone(),
             token_type: TokenType::Access,
             is_super_admin,
         };
@@ -85,12 +95,12 @@ impl AuthService {
 
         let expires = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRATION);
         let payload = Claims {
-            sub: user.user_id,
+            sub: user.user_uuid.clone(),
             jti: uuid::Uuid::new_v4(),
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: user.username.clone(),
-            dept_id: user.dept_id,
+            dept_id: dept_uuid,
             token_type: TokenType::Refresh,
             is_super_admin,
         };
@@ -105,7 +115,7 @@ impl AuthService {
             .secure(true)
             .build();
 
-        let _ = &self.cache_user_entities(user.user_id).await?;
+        let _ = &self.cache_user_entities(user.user_uuid.clone()).await?;
 
 
         // 更新用户最后登录时间
@@ -154,12 +164,12 @@ impl AuthService {
         // 签发新的JWT
         let expires = Utc::now() + Duration::seconds(ACCESS_TOKEN_EXPIRATION);
         let new_claims = Claims {
-            sub: refresh_claims.sub,
+            sub: refresh_claims.sub.clone(),
             jti: uuid::Uuid::new_v4(),
             iat: Utc::now().timestamp() as u64,
             exp: expires.timestamp() as u64,
             name: refresh_claims.name.clone(),
-            dept_id: refresh_claims.dept_id,
+            dept_id: refresh_claims.dept_id.clone(),
             token_type: TokenType::Access,
             is_super_admin: refresh_claims.is_super_admin,
         };
@@ -245,7 +255,7 @@ impl AuthService {
     }
 
     // 当前用户的 Entities 不应该过期; 不然速度太慢了.
-    async fn cache_user_entities(&self, user_id: i32) -> Result<(), AppError> {
+    async fn cache_user_entities(&self, user_id: UserUUID) -> Result<(), AppError> {
         let cache_key = format!("{}:{}", USER_ENTITIES_CACHE_PREFIX, user_id);
         let schema = self.app_state.auth_service.get_schema_copy().await;
         let user_entities = get_user_entities(&self.app_state.db, user_id, &schema).await?;

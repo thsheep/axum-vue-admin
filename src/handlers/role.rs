@@ -48,9 +48,9 @@ pub async fn list_roles(
 
 #[utoipa::path(
     get,
-    path = "/{role_id}",  // 路径中的 {id} 会被识别为参数
+    path = "/{role_uuid}",  // 路径中的 {id} 会被识别为参数
     params(
-        ("role_id" = u64, Path, description = "角色唯一ID", example = 42)
+        ("role_id" = String, Path, description = "角色唯一UUID")
     ),
     responses(
         (status = 200, description = "角色详情", body = RoleResponse),
@@ -62,7 +62,7 @@ pub async fn list_roles(
     ),
 )]
 pub async fn get_role(
-    Path(id): Path<i32>,
+    Path(role_uuid): Path<String>,
     State(service): State<RoleService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -70,7 +70,7 @@ pub async fn get_role(
     let role = service.get_role(
         current_user,
         context,
-        id).await?;
+        role_uuid).await?;
     Ok(ApiResponse::success(role, StatusCode::OK))
 }
 
@@ -101,7 +101,7 @@ pub async fn create_role(
 
 #[utoipa::path(
     put,
-    path = "/{role_id}",
+    path = "/{role_uuid}",
     request_body=UpdateRoleDto,
     responses(  (status=200, body=RoleResponse, description="更新成功"),
                 (status=404, description="角色不存在"),),
@@ -111,7 +111,7 @@ pub async fn create_role(
     ),
 )]
 pub async fn update_role(
-    Path(role_id): Path<i32>,
+    Path(role_uuid): Path<String>,
     State(service): State<RoleService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -121,16 +121,16 @@ pub async fn update_role(
     let role = service.update_role(
         current_user,
         context,
-        role_id,
+        role_uuid,
         dto).await?;
     Ok(ApiResponse::success(role, StatusCode::OK))
 }
 
 #[utoipa::path(
     delete,
-    path = "/{role_id}",
+    path = "/{role_uuid}",
     params(
-        ("role_id" = u64, Path, description = "角色唯一ID", example = 42)
+        ("role_uuid" = String, Path, description = "角色唯一UUID")
     ),
     responses(( status=204, description="删除成功"),),
     tag = ROLE_TAG,
@@ -139,7 +139,7 @@ pub async fn update_role(
     ),
 )]
 pub async fn delete_role(
-    Path(role_id): Path<i32>,
+    Path(role_uuid): Path<String>,
     State(service): State<RoleService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -147,6 +147,6 @@ pub async fn delete_role(
     service.delete_role(
         current_user,
         context,
-        role_id).await?;
+        role_uuid).await?;
     Ok(StatusCode::NO_CONTENT)
 }

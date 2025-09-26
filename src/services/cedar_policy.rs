@@ -7,13 +7,14 @@ use crate::schemas::cedar_policy::{CedarContext,
                                    CreatePolicyDto,
                                    QueryParams};
 use crate::utils::cedar_utils::{AuthAction, ResourceType, ENTITY_TYPE_POLICY, ENTITY_ATTR_NAME};
-use crate::{bad_request, not_found};
+use crate::{bad_request, conflict, not_found};
 use cedar_policy::{Entities, Entity, EntityId, EntityTypeName, EntityUid, Policy, RestrictedExpression};
 use core::str::FromStr;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QuerySelect, RelationTrait, Select, Set};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 use crate::utils::function::reload_policies_and_schema;
 
 
@@ -27,21 +28,21 @@ impl CedarPolicyService {
         Self { app_state: state }
     }
 
-    async fn get_policy_entities(&self, policy_id: i32)  -> Result<Entities, AppError> {
+    async fn get_policy_entities(&self, policy_uuid: &str) -> Result<Entities, AppError> {
         let policy = cedar_policy_set::Entity::find()
-            .filter(cedar_policy_set::Column::PolicyId.eq(policy_id))
+            .filter(cedar_policy_set::Column::PolicyUuid.eq(policy_uuid))
             .one(&self.app_state.db)
             .await?;
         let entities: Entities = match policy {
             Some(policy) => {
                 let mut entities = HashSet::new();
 
-                let policy_uid = EntityId::from_str(&*policy.policy_id.to_string())?;
+                let policy_uid = EntityId::from_str(&*policy.policy_uuid.to_string())?;
                 let policy_typename = EntityTypeName::from_str(ENTITY_TYPE_POLICY)?;
                 let policy_e_uid = EntityUid::from_type_name_and_id(policy_typename, policy_uid);
 
                 let mut attrs = HashMap::new();
-                let name_exp = RestrictedExpression::new_string(policy.policy_str_id);
+                let name_exp = RestrictedExpression::new_string(policy.annotation);
                 attrs.insert(ENTITY_ATTR_NAME.to_string(), name_exp);
 
                 let parents = HashSet::new();
@@ -71,19 +72,24 @@ impl CedarPolicyService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::ViewPolicy,
                 ResourceType::Policy(None),
             )
             .await?;
 
+        let requested_fields: HashSet<String> = params
+            .fields
+            .map(|f| f.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_else(|| {
+            ["uuid", "annotation",  "policy_type", "effect", "is_active", "description",
+                "created_user", "created_at", "updated_at"]
+                .iter().map(|s| s.to_string()).collect()
+        });
+
         let mut query = cedar_policy_set::Entity::find()
-            .column_as(users::Column::Email, "created_user")
-            .join(
-                JoinType::InnerJoin,
-                cedar_policy_set::Relation::Users.def()
-            );
+            .join(JoinType::InnerJoin, cedar_policy_set::Relation::Users.def());
+
         if let Some(effect) = &params.effect {
             query = query.filter(cedar_policy_set::Column::Effect.eq(effect));
         }
@@ -91,75 +97,70 @@ impl CedarPolicyService {
             query = query.filter(cedar_policy_set::Column::IsActive.eq(*is_active));
         }
 
-        let select: Select<cedar_policy_set::Entity> = match params.fields.as_ref() {
-            Some(fields) => self.list_policy_with_fields(query, fields).await?,
-            None => query,
-        };
-
-        let paginator = select
-            .into_model::<CedarPolicyResponse>()
-            .paginate(&self.app_state.db, params.page_size);
-        let total = paginator.num_items().await?;
-        let results = paginator
-            .fetch_page(params.page - 1)
-            .await?
-            .into_iter()
-            .map(|x| serde_json::to_value(x))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok((results, total))
-    }
-
-    async fn list_policy_with_fields(
-        &self,
-        query: Select<cedar_policy_set::Entity>,
-        fields: &str,
-    ) -> Result<Select<cedar_policy_set::Entity>, AppError> {
-        let requested_fields: Vec<&str> = fields.split(',').map(|s| s.trim()).collect();
         let mut select = query.select_only();
         for field in &requested_fields {
-            select = match *field {
-                "id" => select.column_as(cedar_policy_set::Column::PolicyId, "id"),
+            select = match field.as_str() {
+                "uuid" => select.column_as(cedar_policy_set::Column::PolicyUuid, "uuid"),
+                "annotation" => select.column(cedar_policy_set::Column::Annotation),
+                "created_user" => select.column_as(users::Column::Email, "created_user"),
                 "policy_text" => select.column(cedar_policy_set::Column::PolicyText),
+                "policy_type" => select.column(cedar_policy_set::Column::PolicyType),
                 "effect" => select.column(cedar_policy_set::Column::Effect),
                 "is_active" => select.column(cedar_policy_set::Column::IsActive),
                 "description" => select.column(cedar_policy_set::Column::Description),
                 _ => select,
-            }
+            };
         }
-        Ok(select)
+
+        let paginator = select.into_json()
+            .paginate(&self.app_state.db, params.page_size);
+        let total = paginator.num_items().await?;
+        let page_index = if params.page > 0 { params.page - 1 } else { 0 };
+        let results = paginator.fetch_page(page_index).await?;
+
+        Ok((results, total))
     }
 
     pub async fn get_policy(
         &self,
         current_user: CurrentUser,
         context: CedarContext,
-        policy_id: i32,
+        policy_uuid: String,
     ) -> Result<CedarPolicyResponse, AppError> {
-        let es = self.get_policy_entities(policy_id).await?;
+        let es = self.get_policy_entities(&policy_uuid).await?;
 
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::ViewPolicy,
-                ResourceType::Policy(Some(policy_id)),
+                ResourceType::Policy(Some(policy_uuid.clone())),
                 es
             ).await?;
 
-        let policy_model = cedar_policy_set::Entity::find_by_id(policy_id)
-            .column_as(users::Column::Email, "email")
-            .join(
-                JoinType::InnerJoin,
-                cedar_policy_set::Relation::Users.def()
-            )
-            .into_model::<CedarPolicyResponse>()
+        let result = cedar_policy_set::Entity::find()
+            .filter(cedar_policy_set::Column::PolicyUuid.eq(&policy_uuid))
+            .find_also_related(users::Entity)
             .one(&self.app_state.db)
             .await?
-            .ok_or(not_found!("Policy {} not found", policy_id))?;
+            .ok_or(not_found!(format!("Policy with UUID '{}' not found", policy_uuid)))?;
 
-        Ok(policy_model)
+        let (policy, user_opt) = result;
+        let created_user = user_opt.map(|u| u.username).unwrap_or_else(|| "Unknown".to_string());
+
+        Ok(CedarPolicyResponse{
+            uuid: Some(policy.policy_uuid),
+            annotation: Some(policy.annotation),
+            policy_text: Some(policy.policy_text),
+            policy_type: Some(policy.policy_type),
+            effect: Some(policy.effect),
+            is_active: Some(policy.is_active),
+            description: Some(policy.description),
+            created_user: Some(created_user),
+            created_at: policy.created_at,
+            updated_at: policy.updated_at
+        })
     }
 
     pub async fn create_policy(
@@ -172,46 +173,61 @@ impl CedarPolicyService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::CreatePolicy,
                 ResourceType::Policy(None),
             ).await?;
 
-        let policy = Policy::from_str(dto.policy_text.as_str())?;
-        let policy_str_id = policy.annotation("id").ok_or(
-            bad_request!("Missing id annotation for policy")
-        )?.to_string();
+        let policy = Policy::from_str(&dto.policy_text)?;
+        let annotation = policy.annotation("annotation").ok_or(bad_request!("Policy must have an 'annotation'"))?.to_string();
         let effect = policy.effect().to_string();
         let policy_hash = Self::hash_policy_content(&policy.to_string())?;
+        if cedar_policy_set::Entity::find()
+            .filter(cedar_policy_set::Column::PolicyHash.eq(&policy_hash))
+            .one(&self.app_state.db)
+            .await?
+            .is_some()
+            {
+                return Err(conflict!("A policy with the exact same content already exists."));
+            }
 
+        let (email, user_id) = users::Entity::find()
+            .select_only()
+            .column(users::Column::Email)
+            .column(users::Column::UserId)
+            .filter(users::Column::UserUuid.eq(&current_user.uuid))
+            .into_tuple::<(String, i32)>()
+            .one(&self.app_state.db)
+            .await?
+            .ok_or(not_found!("User {} not found", current_user.uuid))?;
+        
+        let policy_uuid = Uuid::new_v4().to_string();
         let new_policy_model = cedar_policy_set::ActiveModel {
-            policy_str_id: Set(policy_str_id),
+            annotation: Set(annotation),
             policy_text: Set(dto.policy_text),
             policy_hash: Set(policy_hash),
             effect: Set(effect),
+            policy_type: Set(dto.policy_type),
+            policy_uuid:Set(policy_uuid),
             is_active: Set(dto.is_active),
             description: Set(dto.description),
-            created_by: Set(current_user.user_id),
+            created_by: Set(user_id),
             ..Default::default()
         };
 
         let new_model = new_policy_model.insert(&self.app_state.db)
             .await?;
-
-        let creator = users::Entity::find_by_id(new_model.created_by)
-            .one(&self.app_state.db)
-            .await?
-            .ok_or(not_found!("User {} not found", current_user.user_id))?;
-
+        
         let response = CedarPolicyResponse{
-            policy_id: Some(new_model.policy_id),
-            policy_str_id: Some(new_model.policy_str_id),
+            uuid: Some(new_model.policy_uuid),
+            annotation: Some(new_model.annotation),
             policy_text: Some(new_model.policy_text),
+            policy_type: Some(new_model.policy_type),
             effect: Some(new_model.effect),
             is_active: Some(new_model.is_active),
             description: Some(new_model.description),
-            created_user: Some(creator.username),
+            created_user: Some(email),
             created_at: new_model.created_at,
             updated_at: new_model.updated_at,
         };
@@ -230,35 +246,47 @@ impl CedarPolicyService {
         &self,
         current_user: CurrentUser,
         context: CedarContext,
-        policy_id: i32,
+        policy_uuid: String,
         dto: CreatePolicyDto,
     ) -> Result<CedarPolicyResponse, AppError> {
-        let user_id = current_user.user_id;
-        let es = self.get_policy_entities(policy_id).await?;
+        let es = self.get_policy_entities(&policy_uuid).await?;
         self.app_state
         .auth_service
             .check_permission_with_entities(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::UpdatePolicy,
-                ResourceType::Policy(Some(policy_id)),
+                ResourceType::Policy(Some(policy_uuid.clone())),
                 es
             ).await?;
 
         let policy = Policy::from_str(dto.policy_text.as_str())?;
-        let policy_str_id = policy.id().to_string();
+        let annotation = policy.annotation("annotation").ok_or(
+            bad_request!("Missing annotation for policy")
+        )?.to_string();
         let effect = policy.effect().to_string();
         let policy_hash = Self::hash_policy_content(&policy.to_string())?;
 
-        let mut policy_model: cedar_policy_set::ActiveModel = cedar_policy_set::Entity::find_by_id(policy_id)
-        .one(&self.app_state.db)
+        let mut policy_model: cedar_policy_set::ActiveModel = cedar_policy_set::Entity::find()
+            .filter(cedar_policy_set::Column::PolicyUuid.eq(&policy_uuid))
+            .one(&self.app_state.db)
         .await?
-        .ok_or(not_found!("Policy {} not found", policy_id))?
+        .ok_or(not_found!("Policy {} not found", policy_uuid))?
             .into();
-
-        policy_model.policy_str_id = Set(policy_str_id);
+        
+        let user_id = users::Entity::find()
+            .select_only()
+            .column(users::Column::UserId)
+            .filter(users::Column::UserUuid.eq(&current_user.uuid))
+            .into_tuple::<i32>()
+            .one(&self.app_state.db)
+            .await?
+            .ok_or(not_found!("User {} not found", current_user.uuid))?;
+        
+        policy_model.annotation = Set(annotation);
         policy_model.policy_text = Set(dto.policy_text);
         policy_model.effect = Set(effect);
+        policy_model.policy_type = Set(dto.policy_type);
         policy_model.is_active = Set(dto.is_active);
         policy_model.description = Set(dto.description);
         policy_model.created_by= Set(user_id);
@@ -272,13 +300,14 @@ impl CedarPolicyService {
             .ok_or(not_found!("User {} not found", user_id))?;
 
         let response = CedarPolicyResponse{
-            policy_id: Some(new_model.policy_id),
-            policy_str_id: Some(new_model.policy_str_id),
+            uuid: Some(new_model.policy_uuid),
+            annotation: Some(new_model.annotation),
             policy_text: Some(new_model.policy_text),
+            policy_type: Some(new_model.policy_type),
             effect: Some(new_model.effect),
             is_active: Some(new_model.is_active),
             description: Some(new_model.description),
-            created_user: Some(creator.username),
+            created_user: Some(creator.email),
             created_at: new_model.created_at,
             updated_at: new_model.updated_at,
         };
@@ -290,20 +319,22 @@ impl CedarPolicyService {
         &self,
         current_user: CurrentUser,
         context: CedarContext,
-        policy_id: i32,
+        policy_uuid: String,
     ) -> Result<(), AppError> {
-        let es = self.get_policy_entities(policy_id).await?;
+        let es = self.get_policy_entities(&policy_uuid).await?;
         self.app_state
         .auth_service
             .check_permission_with_entities(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::DeletePolicy,
-                ResourceType::Policy(Some(policy_id)),
+                ResourceType::Policy(Some(policy_uuid.clone())),
                 es
             ).await?;
 
-        cedar_policy_set::Entity::delete_by_id(policy_id).exec(&self.app_state.db).await?;
+        cedar_policy_set::Entity::delete_many()
+            .filter(cedar_policy_set::Column::PolicyUuid.eq(policy_uuid))
+            .exec(&self.app_state.db).await?;
 
         Ok(())
     }
@@ -316,7 +347,7 @@ impl CedarPolicyService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::UpdatePolicy,
                 ResourceType::Policy(None),

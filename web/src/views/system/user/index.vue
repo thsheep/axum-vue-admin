@@ -53,6 +53,7 @@ onMounted(() => {
 
 // --- 事件处理函数 ---
 const loadData = () => {
+  console.log("queryParams", queryParams)
   store.fetchUsers({
     ...queryParams,
     page: pagination.value.page,
@@ -98,11 +99,11 @@ const handleAdd = () => {
 }
 
 const handleEdit = (row) => {
-  store.fetchUsers()
+  // store.fetchUsers()
   currentItem.value = {
     ...row,
-    dept: row.dept?.id,
-    groups: row.groups?.map(g => g.id),
+    dept: row.dept?.uuid,
+    groups: row.groups?.map(g => g.uuid),
   }
   modalType.value = 'edit'
   showCrudModal.value = true
@@ -115,9 +116,10 @@ const handleSave = async () => {
       await store.createUser(currentItem.value)
       $message.success('创建成功')
     } else {
-      await store.updateUser(currentItem.value.id, currentItem.value)
+      await store.updateUser(currentItem.value.uuid, currentItem.value)
       $message.success('更新成功')
     }
+    loadData()
     showCrudModal.value = false
   } catch (error) {
     $message.error(`操作失败: ${error.message}`)
@@ -128,7 +130,7 @@ const handleSave = async () => {
 
 const handleDelete = async (row) => {
   try {
-    await store.deleteUser(row.id)
+    await store.deleteUser(row.uuid)
     $message.success('删除成功')
   } catch (error) {
     $message.error(`删除失败: ${error.message}`)
@@ -137,10 +139,10 @@ const handleDelete = async (row) => {
 
 // Role Modal
 const handleViewRoles = async (row) => {
-  currentUserId.value = row.id
+  currentUserId.value = row.uuid
   selectedRoleIds.value = []
   try {
-    await store.fetchUserRoles(row.id)
+    await store.fetchUserRoles(row.uuid)
     showRoleModal.value = true
   } catch (error) {
     $message.error(`获取角色失败: ${error.message}`)
@@ -335,7 +337,7 @@ const userRoleColumns = [
     key: 'actions',
     render(row) {
       if (row.source === 'direct') {
-        return h(NPopconfirm, {onPositiveClick: () => handleRemoveRole(row.id)},
+        return h(NPopconfirm, {onPositiveClick: () => handleRemoveRole(row.uuid)},
             {
               trigger: () => withDirectives(
                   h(NButton,
@@ -373,7 +375,7 @@ const validateAddUser = {
       trigger: ['blur'],
       validator: (rule, value, callback) => {
         const re = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/
-        if (!re.test(currentItem.email)) {
+        if (!re.test(value)) {
           callback('邮箱格式错误')
           return
         }
@@ -418,11 +420,11 @@ const validateAddUser = {
 const nodeProps = ({option}) => {
   return {
     onClick() {
-      if (queryParams.dept_id === option.id) {
-        delete queryParams.dept_id
+      if (queryParams.dept_uuid === option.uuid) {
+        delete queryParams.dept_uuid
         handleSearch()
       } else {
-        queryParams.dept_id=option.id
+        queryParams.dept_uuid=option.uuid
         handleSearch()
       }
     },
@@ -438,7 +440,7 @@ const nodeProps = ({option}) => {
       <NTree
           block-line
           :data="departmentOptions"
-          key-field="id"
+          key-field="uuid"
           label-field="name"
           default-expand-all
           :node-props="nodeProps"
@@ -527,7 +529,7 @@ const nodeProps = ({option}) => {
               <NTreeSelect
                   v-model:value="currentItem.dept"
                   :options="departmentOptions"
-                  key-field="id"
+                  key-field="uuid"
                   label-field="name"
                   placeholder="请选择部门"
                   clearable

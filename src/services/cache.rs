@@ -140,14 +140,14 @@ impl CacheService {
     }
 
     async fn get_from_redis(&self, key: &str) -> Result<Option<String>, AppError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_tokio_connection().await?;
         let cache: Option<String> = conn.get(key).await?;
         Ok(cache)
     }
 
     async fn set_to_redis(&self, key: &str, value: &str, ttl_secs: Option<u64>) -> Result<(), AppError> {
         
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis_client.get_multiplexed_tokio_connection().await?;
         if let Some(ttl_secs) = ttl_secs {
             let _: () = conn
                 .set_ex(key, value, ttl_secs)

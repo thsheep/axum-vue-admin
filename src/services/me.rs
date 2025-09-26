@@ -1,13 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use crate::entity::{
-    departments::{Column as DepartmentColumn, Entity as DepartmentEntity, Relation as DepartmentRelation},
-    roles::{Column as RoleColumn, Entity as RoleEntity, Relation as RoleRelation, Model as RoleModel},
-    user_group_members::Column as UserGroupMemberColumn,
-    user_groups::{Column as UserGroupColumn, Entity as UserGroupEntity, Relation as UserGroupRelation},
-    user_roles::{Column as UserRoleColumn, Relation as UserRoleRelation},
-    group_roles::{Column as GroupRoleColumn},
-    users::{Column as UserColumn, Entity as UserEntity},
-};
+use crate::entity::{departments::{Column as DepartmentColumn, Entity as DepartmentEntity, Relation as DepartmentRelation}, roles::{Column as RoleColumn, Entity as RoleEntity, Relation as RoleRelation, Model as RoleModel}, user_group_members::Column as UserGroupMemberColumn, user_groups::{Column as UserGroupColumn, Entity as UserGroupEntity, Relation as UserGroupRelation}, user_roles::{Column as UserRoleColumn, Relation as UserRoleRelation}, group_roles::{Column as GroupRoleColumn}, users::{Column as UserColumn, Entity as UserEntity}, users, user_groups};
 use crate::errors::app_error::AppError;
 use crate::config::state::AppState;
 
@@ -18,7 +10,7 @@ use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, DbErr, EntityTrait, JoinT
 use tokio::task::JoinSet;
 use crate::not_found;
 use crate::schemas::cedar_policy::CedarContext;
-use crate::services::role::get_role_models_by_user_id;
+use crate::services::role::get_role_models_by_user_uuid;
 use crate::services::user::UserService;
 use crate::utils::cedar_utils::{AuthAction, ResourceType};
 
@@ -57,12 +49,6 @@ const UI_ACTIONS: UiActionMap = &[
     ("button:policy_create", AuthAction::CreatePolicy),
     ("button:policy_update", AuthAction::UpdatePolicy),
     ("button:policy_delete", AuthAction::DeletePolicy),
-    // Robots
-    ("munus:robots_management", AuthAction::ViewRobot),
-    ("button:robot_view", AuthAction::ViewRobot),
-    ("button:robot_create", AuthAction::CreateRobot),
-    ("button:robot_update", AuthAction::UpdateRobot),
-    ("button:robot_delete", AuthAction::DeleteRobot)
 ];
 
 
@@ -111,14 +97,14 @@ impl MeService {
 
         for (ui_key, action) in UI_ACTIONS.iter() {
             let auth_service = self.app_state.auth_service.clone();
-            let user = current_user.clone();
+            let user_uuid = current_user.uuid.clone();
             let ctx = context.clone();
             let action = *action;
             let key = ui_key.to_string();
 
             join_set.spawn(async move {
                 let has_permission = auth_service
-                    .check_permission(user.user_id, ctx, action, ResourceType::UI(None))
+                    .check_permission(&user_uuid, ctx, action, ResourceType::UI(None))
                     .await?;
 
                 Ok::<(String, bool), AppError>((key, has_permission))
@@ -148,13 +134,13 @@ impl MeService {
     ) -> Result<Option<DeptResponse>, AppError> {
 
         let department = DepartmentEntity::find()
-            .column_as(DepartmentColumn::DeptId, "id")
+            .column_as(DepartmentColumn::DeptUuid, "uuid")
             .column_as(DepartmentColumn::Name, "name")
             .join(
                 JoinType::InnerJoin,
                 DepartmentRelation::Users.def(),
             )
-            .filter(UserColumn::UserId.eq(current_user.user_id))
+            .filter(UserColumn::UserUuid.eq(&current_user.uuid))
             .into_model::<DeptResponse>()
             .one(&self.app_state.db)
             .await?;
@@ -163,23 +149,24 @@ impl MeService {
     }
 
     async fn groups(&self, current_user: &CurrentUser) -> Result<Vec<GroupResponse>, AppError> {
-        let groups = UserGroupEntity::find()
-            .column_as(UserGroupColumn::UserGroupId, "id")
-            .column_as(UserGroupColumn::Name, "name")
-            .join(
-                JoinType::InnerJoin,
-                UserGroupRelation::UserGroupMembers.def(),
-            )
-            .filter(UserGroupMemberColumn::UserId.eq(current_user.user_id))
+        let user = users::Entity::find()
+            .filter(users::Column::UserUuid.eq(&current_user.uuid))
+            .one(&self.app_state.db)
+            .await?
+            .ok_or(not_found!("User not found"))?;
+
+        let user_groups = user
+            .find_related(user_groups::Entity)
             .into_model::<GroupResponse>()
             .all(&self.app_state.db)
             .await?;
 
-        Ok(groups)
+        Ok(user_groups)
     }
 
     async fn info(&self, current_user: &CurrentUser) -> Result<Info, AppError> {
-        let user = UserEntity::find_by_id(current_user.user_id)
+        let user = UserEntity::find()
+            .filter(users::Column::UserUuid.eq(&current_user.uuid))
             .into_model::<Info>()
             .one(&self.app_state.db)
             .await?
@@ -188,7 +175,7 @@ impl MeService {
     }
 
     async fn roles(&self, current_user: &CurrentUser) -> Result<Vec<String>, AppError> {
-        let role_names = get_role_models_by_user_id(&self.app_state.db, current_user.user_id)
+        let role_names = get_role_models_by_user_uuid(&self.app_state.db, current_user.uuid.clone())
             .await?
             .into_iter()
             .map(|x| x.role_name)

@@ -32,6 +32,16 @@ export const usePolicyStore = defineStore('policy', {
             await this.fetchPolicies({ page: 1, pageSize: this.pagination.pageSize });
         },
 
+        async fetchPolicyByID(id) {
+            this.isTableLoading = true;
+            try {
+                const response = await policyApi.getPolicyByID(id);
+                return response.data;
+            } finally {
+                this.isTableLoading = false;
+            }
+        },
+
         async updatePolicy(id, data) {
             await policyApi.updatePolicy(id, data);
             await this.fetchPolicies({ page: this.pagination.page, pageSize: this.pagination.pageSize });

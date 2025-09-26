@@ -68,9 +68,9 @@ pub async fn create_group(
 
 #[utoipa::path(
     get,
-    path = "/{group_id}",
+    path = "/{group_uuid}",
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一UUID")
     ),
     responses(( status=200, body=GroupResponse, description = "获取成功"),
     ( status=404, description = "不存在"),),
@@ -80,7 +80,7 @@ pub async fn create_group(
     ),
 )]
 pub async fn get_group(
-    Path(group_id): Path<i32>,
+    Path(group_uuid): Path<String>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -88,16 +88,16 @@ pub async fn get_group(
     let group = service.get_group(
         current_user,
         context,
-        group_id).await?;
+        group_uuid).await?;
     Ok(ApiResponse::success(group, StatusCode::OK))
 }
 
 #[utoipa::path(
     put,
-    path = "/{group_id}",
+    path = "/{group_uuid}",
     request_body=CreateGroupDto,
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一UUID")
     ),
     responses(( status=200, body=GroupResponse, description = "更新成功"),
                 (status=404, description="用户组不存在"),),
@@ -107,7 +107,7 @@ pub async fn get_group(
     ),
 )]
 pub async fn update_group(
-    Path(group_id): Path<i32>,
+    Path(group_uuid): Path<String>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -116,15 +116,16 @@ pub async fn update_group(
     let group = service.update_group(
         current_user,
         context,
-        group_id, dto).await?;
+        group_uuid,
+        dto).await?;
     Ok(ApiResponse::success(group, StatusCode::OK))
 }
 
 #[utoipa::path(
     delete,
-    path = "/{group_id}",
+    path = "/{group_uuid}",
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一UUID")
     ),
     responses(
     ( status=200, description="删除成功"),
@@ -137,7 +138,7 @@ pub async fn update_group(
     ),
 )]
 pub async fn delete_group(
-    Path(group_id): Path<i32>,
+    Path(group_uuid): Path<String>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -145,16 +146,16 @@ pub async fn delete_group(
     service.delete_group(
         current_user,
         context,
-        group_id).await?;
+        group_uuid).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
     post,
-    path = "/{group_id}/users",
+    path = "/{group_uuid}/users",
     request_body=AssignUsersDto,
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一UUID")
     ),
     responses(( status=201, description="分配用户组成功"),),
     tag = GROUP_TAG,
@@ -163,28 +164,28 @@ pub async fn delete_group(
     ),
 )]
 pub async fn assign_users(
-    Path(group_id): Path<i32>,
+    Path(group_uuid): Path<String>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
     Json(dto): Json<AssignUsersDto>,
-) -> Result<ApiResponse<()>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     service.assign_users(
         current_user,
         context,
-        group_id, 
+        group_uuid,
         dto).await?;
-    Ok(ApiResponse::success_empty(StatusCode::OK))
+    Ok(StatusCode::CREATED)
 }
 
 
 #[utoipa::path(
     delete,
-    path = "/{group_id}/users/{user_id}",
+    path = "/{group_uuid}/users/{user_uuid}",
     request_body=AssignUsersDto,
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42),
-        ("user_id" = i32, Path, description = "用户唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一UUID"),
+        ("user_uuid" = String, Path, description = "用户唯一UUID",)
     ),
     responses(( status=200, description="删除成功"),),
     tag = GROUP_TAG,
@@ -193,7 +194,7 @@ pub async fn assign_users(
     ),
 )]
 pub async fn revoke_users(
-    Path((group_id, user_id)): Path<(i32, i32)>,
+    Path((group_uuid, user_uuid)): Path<(String, String)>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>
@@ -201,18 +202,18 @@ pub async fn revoke_users(
     service.revoke_user(
         current_user,
         context,
-        group_id, 
-        user_id).await?;
+        group_uuid,
+        user_uuid).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 
 #[utoipa::path(
     post,
-    path = "/{group_id}/roles",
+    path = "/{group_uuid}/roles",
     request_body=AssignRolesDto,
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一ID")
     ),
     responses(( status=201, description="分配角色成功"),),
     tag = GROUP_TAG,
@@ -221,7 +222,7 @@ pub async fn revoke_users(
     ),
 )]
 pub async fn assign_roles(
-    Path(group_id): Path<i32>,
+    Path(group_uuid): Path<String>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -230,7 +231,7 @@ pub async fn assign_roles(
     service.assign_roles(
         current_user,
         context,
-        group_id,
+        group_uuid,
         dto
     ).await?;
     Ok(StatusCode::CREATED)
@@ -238,19 +239,19 @@ pub async fn assign_roles(
 
 #[utoipa::path(
     delete,
-    path = "/{group_id}/roles/{role_id}",
+    path = "/{group_uuid}/roles/{role_uuid}",
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42),
-        ("role_id" = i32, Path, description = "角色唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一ID",),
+        ("role_uuid" = String, Path, description = "角色唯一ID",)
     ),
-    responses(( status=201, description="移除角色成功"),),
+    responses(( status=204, description="移除角色成功"),),
     tag = GROUP_TAG,
     security(
       ("bearerAuth" = [])
     ),
 )]
 pub async fn revoke_roles(
-    Path((group_id, role_id)): Path<(i32, i32)>,
+    Path((group_uuid, role_uuid)): Path<(String, String)>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>
@@ -258,8 +259,8 @@ pub async fn revoke_roles(
     service.revoke_roles(
         current_user,
         context,
-        group_id,
-        role_id
+        group_uuid,
+        role_uuid
     ).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -267,9 +268,9 @@ pub async fn revoke_roles(
 
 #[utoipa::path(
     get,
-    path = "/{group_id}/roles",
+    path = "/{group_uuid}/roles",
     params(
-        ("group_id" = i32, Path, description = "用户组唯一ID", example = 42)
+        ("group_uuid" = String, Path, description = "用户组唯一UUID")
     ),
     responses(( status=200, body=GroupRoleResponse, description = "获取成功"),
     ( status=404, description = "不存在"),),
@@ -279,7 +280,7 @@ pub async fn revoke_roles(
     ),
 )]
 pub async fn get_group_roles(
-    Path(group_id): Path<i32>,
+    Path(group_uuid): Path<String>,
     State(service): State<GroupService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>
@@ -287,6 +288,6 @@ pub async fn get_group_roles(
     let group_roles = service.get_group_roles(
         current_user,
         context,
-        group_id).await?;
+        group_uuid).await?;
     Ok(ApiResponse::success(group_roles, StatusCode::OK))
 }

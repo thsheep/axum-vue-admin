@@ -19,14 +19,6 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
 
-    pub fn success_empty(status_code: StatusCode) -> Self {
-        Self {
-            code: status_code.as_u16(),
-            message: "success".to_string(),
-            data: None,
-        }
-    }
-
     pub fn error(code: u16, msg: String) -> Self {
         Self {
             code,

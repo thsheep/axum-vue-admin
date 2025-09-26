@@ -1,3 +1,6 @@
+import { CronExpressionParser } from 'cron-parser';
+
+
 const toString = Object.prototype.toString
 
 export function is(val, type) {
@@ -118,7 +121,18 @@ export const isServer = typeof window === 'undefined'
 
 export const isClient = !isServer
 
+
 export function isEmail(email) {
   const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
   return re.test(email)
+}
+
+
+export function isCronExpressionValid(cron) {
+  try {
+    CronExpressionParser.parse(cron);
+    return true;
+  } catch (error) {
+    return false;
+  }
 }

@@ -71,11 +71,37 @@
     "text": {
       "severError": "500 服务器错误",
       "update_success": "修改成功",
-      "pagination": "共 {itemCount} 条"
+      "pagination": "共 {itemCount} 条",
+      "miss_file": "缺少文件",
+      "last_schedule_time": "上次运行时间: {datetimeStr}"
     },
     "buttons": {
       "update": "修改",
-      "reset": "重置"
+      "reset": "重置",
+      "viewDetail": "查看详情",
+      "retry": "重试"
+    },
+    "fields": {
+      "name": "名字",
+      "account": "账号",
+      "category": "类别",
+      "region": "地区",
+      "expiration_time": "过期时间",
+      "user": "用户",
+      "dept": "部门",
+      "robot": "机器人",
+      "detail": "详细",
+      "log": "日志",
+      "start_at": "启动时间",
+      "end_at": "结束时间",
+      "description": "描述",
+      "status": "状态",
+      "created_at": "创建时间",
+      "operate": "操作",
+      "password": "密码",
+      "node": "节点",
+      "result_file": "结果文件",
+      "historyId": "记录ID"
     }
   }
 }

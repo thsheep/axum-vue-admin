@@ -7,7 +7,7 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub policy_id: i32,
-    pub policy_str_id: String,
+    pub annotation: String,
     #[sea_orm(column_type = "Text")]
     pub policy_text: String,
     pub effect: String,
@@ -16,6 +16,9 @@ pub struct Model {
     pub description: String,
     #[sea_orm(unique)]
     pub policy_hash: String,
+    pub policy_type: String,
+    #[sea_orm(unique)]
+    pub policy_uuid: String,
     pub created_by: i32,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
@@ -23,6 +26,8 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::template_links::Entity")]
+    TemplateLinks,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::CreatedBy",
@@ -36,6 +41,12 @@ pub enum Relation {
 impl Related<super::users::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Users.def()
+    }
+}
+
+impl Related<super::template_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::TemplateLinks.def()
     }
 }
 

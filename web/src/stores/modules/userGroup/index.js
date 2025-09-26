@@ -23,13 +23,13 @@ export const useUserGroupStore = defineStore('userGroup', {
         // 将角色列表转换为 NTree 需要的数据格式
         roleTreeOptions: (state) => {
             return state.allRoles.map(role => ({
-                key: role.id,
+                key: role.uuid,
                 label: role.name,
             }));
         },
         // 从当前用户组的角色列表中计算出需要勾选的 key
         checkedRoleKeys: (state) => {
-            return state.currentGroupRoles.map(role => role.id);
+            return state.currentGroupRoles.map(role => role.uuid);
         },
     },
 
@@ -64,7 +64,7 @@ export const useUserGroupStore = defineStore('userGroup', {
         async fetchAllRoles() {
             // 避免重复获取
             if (this.allRoles.length > 0) return;
-            const response = await roleApi.getRoles({ pageSize: 999, fields: 'id,name' });
+            const response = await roleApi.getRoles({ pageSize: 999, fields: 'uuid,name' });
             this.allRoles = response.data;
         },
 

@@ -12,3 +12,4 @@ pub mod cache;
 pub mod cedar_policy;
 pub mod cedar_schema;
 pub mod email;
+pub mod policy_link_manager;

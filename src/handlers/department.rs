@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     Extension,
 };
-
+use axum::response::IntoResponse;
 use crate::config::openapi::DEPARTMENT_TAG;
 use crate::schemas::{auth::CurrentUser, response::ApiResponse, user::UserResponse};
 use crate::schemas::cedar_policy::CedarContext;
@@ -58,10 +58,10 @@ pub async fn create_department(
 
 #[utoipa::path(
     put,
-    path = "/{dept_id}",
+    path = "/{dept_uuid}",
     request_body=CreateDepartmentDto,
     params(
-        ("dept_id" = u64, Path, description = "部门唯一ID", example = 42)
+        ("dept_uuid" = String, Path, description = "部门唯一UUID")
     ),
     responses(  (status=200, body=DepartmentResponse, description="更新成功"),
                 (status=404, description="部门不存在"),),
@@ -71,7 +71,7 @@ pub async fn create_department(
     ),
 )]
 pub async fn update_department(
-    Path(dept_id): Path<i32>,
+    Path(dept_uuid): Path<String>,
     State(service): State<DepartmentService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -80,18 +80,18 @@ pub async fn update_department(
     let department = service.update_department(
         current_user,
         context,
-        dept_id, dto).await?;
+        dept_uuid, dto).await?;
     Ok(ApiResponse::success(department, StatusCode::OK))
 }
 
 #[utoipa::path(
     delete,
-    path = "/{dept_id}",
+    path = "/{dept_uuid}",
     params(
-        ("dept_id" = u64, Path, description = "部门唯一ID", example = 42)
+        ("dept_uuid" = String, Path, description = "部门唯一UUID")
     ),
     responses(
-    ( status=200, description="删除成功"),
+    ( status=204, description="删除成功"),
     ( status=404, description="部门不存在"),
     ( status=403, description="删除错误"),
     ),
@@ -101,24 +101,24 @@ pub async fn update_department(
     ),
 )]
 pub async fn delete_department(
-    Path(dept_id): Path<i32>,
+    Path(dept_uuid): Path<String>,
     State(service): State<DepartmentService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
-) -> Result<ApiResponse<()>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     service.delete_department(
         current_user,
         context,
-        dept_id).await?;
-    Ok(ApiResponse::success_empty(StatusCode::OK))
+        dept_uuid).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // GET	/api/departments/{id}/users	获取部门所有用户详情	dept:read
 #[utoipa::path(
     get,
-    path = "/{dept_id}/users",
+    path = "/{dept_uuid}/users",
     params(
-        ("dept_id" = u64, Path, description = "部门唯一ID", example = 42)
+        ("dept_uuid" = String, Path, description = "部门唯一UUID")
     ),
     responses(
     ( status=200, description="获取成功")
@@ -129,7 +129,7 @@ pub async fn delete_department(
     ),
 )]
 pub async fn departments_users(
-    Path(dept_id): Path<i32>,
+    Path(dept_uuid): Path<String>,
     State(service): State<DepartmentService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -137,6 +137,6 @@ pub async fn departments_users(
     let users = service.department_users(
         current_user,
         context,
-        dept_id).await?;
+        dept_uuid).await?;
     Ok(ApiResponse::success(users, StatusCode::OK))
 }

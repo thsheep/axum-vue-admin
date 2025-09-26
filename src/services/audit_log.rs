@@ -3,6 +3,7 @@ use crate::config::state::AppState;
 use crate::errors::app_error::AppError;
 use crate::entity::auditlog::{ActiveModel as AuditLogActiveModel, Entity as AuditLogEntity};
 use sea_orm::{ActiveModelTrait, Set};
+use crate::schemas::user::UserUUID;
 
 #[derive(Clone)]
 pub struct AuditLogService {
@@ -16,7 +17,7 @@ impl AuditLogService {
 
     pub async fn log(
         &self,
-        user_id: i32,
+        user_id: UserUUID,
         module: String,
         method: String,
         path: String,

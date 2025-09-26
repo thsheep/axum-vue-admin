@@ -71,7 +71,7 @@ const handleSave = async () => {
       await store.createDepartment(currentItem.value);
       $message.success('创建成功');
     } else {
-      await store.updateDepartment(currentItem.value.id, currentItem.value);
+      await store.updateDepartment(currentItem.value.uuid, currentItem.value);
       $message.success('更新成功');
     }
     showModal.value = false;
@@ -84,10 +84,9 @@ const handleSave = async () => {
 
 const handleDelete = async (row) => {
   try {
-    await store.deleteDepartment(row.id);
-    $message.success('删除成功');
+    await store.deleteDepartment(row.uuid);
   } catch (error) {
-    $message.error(`删除失败: ${error.message}`);
+    console.log(error);
   }
 };
 
@@ -159,7 +158,7 @@ const columns = [
         :columns="columns"
         :data="departments"
         :loading="isLoading"
-        row-key="id"
+        row-key="uuid"
         :pagination="false"
         @search="handleSearch"
         @reset="handleResetSearch"
@@ -177,10 +176,10 @@ const columns = [
         :loading="isSubmitting"
         @save="handleSave"
     >
-      <NForm :model="currentItem" :rules="deptRules">
-        <NFormItem label="父级部门" path="parent_id">
+      <NForm :model="currentItem" :rules="deptRules" label-placement="left" label-width="auto">
+        <NFormItem label="父级部门" path="parent_id" required>
           <NTreeSelect
-              v-model:value="currentItem.parent_id"
+              v-model:value="currentItem.parent_uuid"
               :options="departmentOptions"
               key-field="id"
               label-field="name"
@@ -194,7 +193,7 @@ const columns = [
           <NInput v-model:value="currentItem.name"/>
         </NFormItem>
         <NFormItem label="备注" path="desc">
-          <NInput v-model:value="currentItem.desc" type="textarea"/>
+          <NInput v-model:value="currentItem.desc"/>
         </NFormItem>
         <NFormItem label="排序" path="order">
           <NInputNumber v-model:value="currentItem.order" min="0"/>

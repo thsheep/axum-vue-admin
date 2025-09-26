@@ -71,11 +71,35 @@
     "text": {
       "severError": "500 Server Error",
       "update_success": "Update success",
-      "pagination": "Total {itemCount} items"
+      "pagination": "Total {itemCount} items",
+      "miss_file": "Miss File",
+      "last_schedule_time": "Last schedule time: {datetimeStr}"
     },
     "buttons": {
       "update": "Update",
-      "reset": "Reset"
+      "reset": "Reset",
+      "viewDetail": "view detail"
+    },
+    "fields": {
+      "name": "Name",
+      "user": "User",
+      "account": "Account",
+      "category": "Category",
+      "region": "Region",
+      "expiration_time": "Expiration Time",
+      "dept": "Dept",
+      "robot": "Robot",
+      "detail": "Detail",
+      "start_at": "Start Time",
+      "end_at": "End Time",
+      "description": "Description",
+      "status": "Status",
+      "created_at": "Create Time",
+      "operate": "Operate",
+      "password": "Password",
+      "node": "Node",
+      "result_file": "Result File",
+      "historyId": "History ID"
     }
   }
 }

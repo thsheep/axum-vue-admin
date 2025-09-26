@@ -7,10 +7,45 @@ const http = axios.create({
     headers: { 'Content-Type': 'application/json' },
 });
 
+
+function cleanObject(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+
+    const cleaned = Array.isArray(obj) ? [] : {};
+
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const value = obj[key];
+
+            if (typeof value === 'object' && value !== null) {
+                const cleanedValue = cleanObject(value);
+
+                if (Object.keys(cleanedValue).length > 0) {
+                    cleaned[key] = cleanedValue;
+                }
+
+            }
+            else if (value !== null && value !== undefined && value !== '') {
+                cleaned[key] = value;
+            }
+        }
+    }
+
+    return cleaned;
+}
+
 // --- 请求拦截器 ---
 http.interceptors.request.use(
     (config) => {
         // window.$loadingBar?.start();
+
+        if (config.method === 'post' || config.method === 'put') {
+            if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
+                config.data = cleanObject(config.data);
+            }
+        }
 
         if (config.noNeedToken) {
             return config;
@@ -95,12 +130,12 @@ http.interceptors.response.use(
         };
 
         if (error.response) {
-            const serverMessage = error.response.data?.msg || error.response.data?.message;
+            const serverMessage = error.response.data?.message || error.response.data?.message;
             switch (error.response.status) {
                 case 400: customError.message = serverMessage || '请求参数错误'; break;
-                case 403: customError.message = '您没有权限执行此操作'; break;
-                case 404: customError.message = `请求的资源未找到 (${originalRequest.url})`; break;
-                case 500: customError.message = '服务器内部错误'; break;
+                case 403: customError.message = serverMessage || '您没有权限执行此操作'; break;
+                case 404: customError.message = serverMessage || `请求的资源未找到 (${originalRequest.url})`; break;
+                case 500: customError.message = serverMessage || '服务器内部错误'; break;
                 default: customError.message = serverMessage || `请求失败 (${error.response.status})`;
             }
         } else if (error.request) {

@@ -1,7 +1,10 @@
+use serde_with::DisplayFromStr;
+use cedar_policy::{EntityUid, PolicyId};
 use serde::{Deserialize, Serialize};
 use sea_orm::FromQueryResult;
 use utoipa::{IntoParams, ToSchema};
 use chrono::{DateTime, Utc};
+use serde_with::serde_as;
 use validator::Validate;
 use crate::utils::function::{default_page, default_page_size, default_true};
 
@@ -28,6 +31,7 @@ pub struct QueryParams {
 #[derive(Default, Debug, Serialize, Deserialize, ToSchema, Validate)]
 pub struct CreatePolicyDto {
     pub policy_text: String,
+    pub policy_type: String,
     #[serde(default="default_true")]
     pub is_active: bool,
     pub description: String,
@@ -37,12 +41,14 @@ pub struct CreatePolicyDto {
 
 #[derive(Default, Debug, Serialize, Deserialize, FromQueryResult, ToSchema)]
 pub struct CedarPolicyResponse {
-    #[serde(skip_serializing_if = "Option::is_none", rename = "id")]
-    pub policy_id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub policy_str_id: Option<String>,
+    pub uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effect: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,9 +70,24 @@ pub struct UpdateSchema{
 
 #[derive(Default, Debug, Serialize, Deserialize, FromQueryResult, ToSchema)]
 pub struct CedarSchemaResponse{
-    pub id: i32,
+    pub uuid: String,
     pub schema: String,
     pub description: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+
+/// 一持久化的模板链接信息。
+#[serde_as]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TemplateLinkRecord {
+    #[serde_as(as = "DisplayFromStr")]
+    pub link_uuid: PolicyId,
+    #[serde_as(as = "DisplayFromStr")]
+    pub template_uuid: PolicyId,
+    #[serde_as(as = "DisplayFromStr")]
+    pub principal_uid: EntityUid,
+    #[serde_as(as = "DisplayFromStr")]
+    pub resource_uid: EntityUid,
 }

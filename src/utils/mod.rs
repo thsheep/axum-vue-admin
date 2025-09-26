@@ -3,7 +3,6 @@
 pub mod crypto;
 pub mod date;
 pub mod jwt;
-pub mod services;
 pub mod sso_utils;
 pub mod validation;
 pub mod function;

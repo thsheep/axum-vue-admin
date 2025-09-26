@@ -1,5 +1,5 @@
-use alloc::alloc;
 use std::num::ParseIntError;
+use anyhow::anyhow;
 use crate::schemas::response::ApiResponse;
 use axum::{
     Json,
@@ -112,6 +112,22 @@ impl From<serde_json::Error> for AppError {
 impl From<sea_orm::DbErr> for AppError {
     fn from(err: sea_orm::DbErr) -> Self {
         tracing::error!("Database error: {:?}", err);
+        match &err {
+            sea_orm::DbErr::Exec(sea_orm::RuntimeErr::SqlxError(sqlx_err)) => {
+                match sqlx_err {
+                    sqlx::Error::Database(db_err) => {
+                        if db_err.is_unique_violation() {
+                            return Self::conflict(anyhow::Error::from(err));
+                        }
+                        if db_err.is_foreign_key_violation() {
+                            return Self::not_found(anyhow::Error::from(err));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => return Self::internal_server_error(err),
+        }
         Self::internal_server_error(anyhow::Error::from(err))
     }
 }
@@ -234,6 +250,7 @@ impl From<ParseIntError> for AppError {
 // 从anyhow::Error转换（默认为内部服务器错误）
 impl From<anyhow::Error> for AppError {
     fn from(err: anyhow::Error) -> Self {
+
         Self::internal_server_error(err)
     }
 }

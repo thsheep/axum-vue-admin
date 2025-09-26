@@ -10,6 +10,10 @@ export const createPolicy = (data) => {
     return http.post('/cedar_policies', data);
 };
 
+export const getPolicyByID = (id) => {
+    return http.get(`/cedar_policies/${id}`);
+};
+
 // 更新策略
 export const updatePolicy = (id, data) => {
     return http.put(`/cedar_policies/${id}`, data);

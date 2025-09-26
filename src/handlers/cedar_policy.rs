@@ -74,9 +74,9 @@ pub async fn create_policy(
 
 #[utoipa::path(
     get,
-    path = "/{policy_id}",
+    path = "/{policy_uuid}",
     params(
-        ("policy_id" = i32, Path, description = "策略唯一ID", example = 42)
+        ("policy_uuid" = String, Path, description = "策略唯一UUID")
     ),
     responses(( status=200, body=CedarPolicyResponse, description = "获取成功"),
     ( status=404, description = "不存在"),),
@@ -87,14 +87,14 @@ pub async fn create_policy(
 )]
 pub async fn get_policy(
     State(service): State<CedarPolicyService>,
-    Path(policy_id): Path<i32>,
+    Path(policy_uuid): Path<String>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
 ) -> Result<impl IntoResponse, AppError> {
     let policy = service.get_policy(
         current_user,
         context,
-        policy_id,
+        policy_uuid,
     ).await?;
     
     Ok(ApiResponse::success(policy, StatusCode::OK))
@@ -102,10 +102,10 @@ pub async fn get_policy(
 
 #[utoipa::path(
     put,
-    path = "/{policy_id}",
+    path = "/{policy_uuid}",
     request_body=CreatePolicyDto,
     params(
-        ("policy_id" = i32, Path, description = "Policy唯一ID", example = 42)
+        ("policy_uuid" = String, Path, description = "Policy唯一UUID")
     ),
     responses(( status=200, body=CedarPolicyResponse, description = "更新成功"),
                 (status=404, description="策略不存在"),),
@@ -116,7 +116,7 @@ pub async fn get_policy(
 )]
 pub async fn update_policy(
     State(service): State<CedarPolicyService>,
-    Path(policy_id): Path<i32>,
+    Path(policy_uuid): Path<String>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
     Json(dto): Json<CreatePolicyDto>,
@@ -127,7 +127,7 @@ pub async fn update_policy(
     let policy = service.update_policy(
         current_user,
         context,
-        policy_id,
+        policy_uuid,
         dto
     ).await?;
     Ok(ApiResponse::success(policy, StatusCode::OK))
@@ -136,9 +136,9 @@ pub async fn update_policy(
 
 #[utoipa::path(
     delete,
-    path = "/{policy_id}",
+    path = "/{policy_uuid}",
     params(
-        ("policy_id" = i32, Path, description = "策略唯一ID", example = 42)
+        ("policy_uuid" = String, Path, description = "策略唯一UUID")
     ),
     responses(
     ( status=200, description="删除成功"),
@@ -152,14 +152,14 @@ pub async fn update_policy(
 )]
 pub async fn delete_policy(
     State(service): State<CedarPolicyService>,
-    Path(policy_id): Path<i32>,
+    Path(policy_uuid): Path<String>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
 ) -> Result<impl IntoResponse, AppError> {
     service.delete_policy(
         current_user,
         context,
-        policy_id,
+        policy_uuid,
     ).await?;
     
     Ok(StatusCode::NO_CONTENT)

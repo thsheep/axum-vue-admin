@@ -6,10 +6,14 @@ use serde_json::{json};
 use std::str::FromStr;
 use tracing::log::debug;
 use crate::forbidden;
-
+use crate::schemas::user::UserUUID;
 // Entities 缓存用的key前缀
 
 pub const USER_ENTITIES_CACHE_PREFIX: &str = "user_entities";
+
+// Policies 缓存key
+pub const POLICIES_AND_TEMPLATES_CACHE_KEY: &str = "cedar:policies_and_templates";
+pub const TEMPLATE_LINKS_CACHE_KEY: &str = "cedar:template_links";
 
 
 // Cedar 使用的常量
@@ -41,6 +45,7 @@ pub enum AuthAction {
     CreateDepartment,
     UpdateDepartment,
     MoveDepartment,
+    AddChildDepartment, // 目标父部门是否有某种“管理”或“添加子部门”的权限
     DeleteDepartment,
     ViewGroup,
     ViewGroupUsers,
@@ -58,19 +63,6 @@ pub enum AuthAction {
     CreatePolicy,
     UpdatePolicy,
     DeletePolicy,
-    
-    // Robot
-    ViewRobot,
-    CreateRobot,
-    UpdateRobot,
-    DeleteRobot,
-    StartRobot,
-    StopRobot,
-    ShareRobot,
-    ViewRobotAccount,
-    CreateRobotAccount,
-    UpdateRobotAccount,
-    DeleteRobotAccount,
 }
 
 impl AuthAction {
@@ -85,6 +77,7 @@ impl AuthAction {
             AuthAction::CreateDepartment => r#"Action::"CreateDepartment""#,
             AuthAction::UpdateDepartment => r#"Action::"UpdateDepartment""#,
             AuthAction::MoveDepartment => r#"Action::"MoveDepartment""#,
+            AuthAction::AddChildDepartment => r#"Action::"AddChildDepartment""#,
             AuthAction::DeleteDepartment => r#"Action::"DeleteDepartment""#,
             AuthAction::ViewGroup => r#"Action::"ViewGroup""#,
             AuthAction::ViewGroupUsers => r#"Action::"ViewGroupUsers""#,
@@ -102,18 +95,6 @@ impl AuthAction {
             AuthAction::CreatePolicy => r#"Action::"CreatePolicies""#,
             AuthAction::UpdatePolicy => r#"Action::"UpdatePolicies""#,
             AuthAction::DeletePolicy => r#"Action::"DeletePolicies""#,
-            //
-            AuthAction::ViewRobot => r#"Action::"ViewRobot""#,
-            AuthAction::CreateRobot => r#"Action::"CreateRobot""#,
-            AuthAction::UpdateRobot => r#"Action::"UpdateRobot""#,
-            AuthAction::DeleteRobot => r#"Action::"DeleteRobot""#,
-            AuthAction::StartRobot => r#"Action::"StartRobot""#,
-            AuthAction::StopRobot => r#"Action::"StopRobot""#,
-            AuthAction::ShareRobot => r#"Action::"ShareRobot""#,
-            AuthAction::ViewRobotAccount => r#"Action::"ViewRobotAccount""#,
-            AuthAction::CreateRobotAccount => r#"Action::"CreateRobotAccount""#,
-            AuthAction::UpdateRobotAccount => r#"Action::"UpdateRobotAccount""#,
-            AuthAction::DeleteRobotAccount => r#"Action::"DeleteRobotAccount""#,
         }
     }
 }
@@ -121,13 +102,13 @@ impl AuthAction {
 /// 资源类型定义
 #[derive(Debug, Clone)]
 pub enum ResourceType {
-    User(Option<i32>),      // User::* 或 User::{id}
-    Department(Option<i32>), // Department::* 或 Department::{id}
-    Group(Option<i32>),     // Group::* 或 Group::{id}
-    Role(Option<i32>),      // Role::* 或 Role::{id}
-    Policy(Option<i32>), // CedarPolicy::*
-    Robot(Option<i32>),
-    RobotAccount(Option<i32>),
+    User(Option<String>),      // User::* 或 User::{id}
+    Department(Option<String>), // Department::* 或 Department::{id}
+    Group(Option<String>),     // Group::* 或 Group::{id}
+    Role(Option<String>),      // Role::* 或 Role::{id}
+    Policy(Option<String>), // CedarPolicy::*
+    Robot(Option<String>),
+    RobotAccount(Option<String>),
     UI(Option<String>),
     AuditLog,               // AuditLog::*
 }
@@ -162,7 +143,7 @@ impl ResourceType {
 
 /// 授权检查构建器
 pub struct AuthorizationBuilder {
-    user_id: i32,
+    user_id: UserUUID,
     context: CedarContext,
     action: AuthAction,
     resource: ResourceType,
@@ -170,12 +151,12 @@ pub struct AuthorizationBuilder {
 }
 
 impl AuthorizationBuilder {
-    pub fn new(user_id: i32, context: CedarContext) -> Self {
+    pub fn new(user_id: UserUUID, context: CedarContext) -> Self {
         Self {
             user_id,
             context,
-            action: AuthAction::ViewUser, // 默认值
-            resource: ResourceType::User(None), // 默认值
+            action: AuthAction::ViewUser,
+            resource: ResourceType::User(None),
             resource_entities: Entities::empty(),
         }
     }
@@ -203,7 +184,7 @@ impl AuthorizationBuilder {
         let context = Context::from_json_value(json!(self.context), None)?;
 
         let request = Request::new(principal, action, resource, context, None)?;
-        debug!("Request: {:?}", request);
+        // debug!("Request: {:?}", request);
 
         Ok((request, self.resource_entities))
     }

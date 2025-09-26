@@ -26,8 +26,8 @@ export const useUserManagementStore = defineStore('userManagement', {
 
     getters: {
         departmentOptions: (state) => state.departments,
-        userGroupOptions: (state) => state.userGroups.map(item => ({ label: item.name, value: item.id })),
-        roleOptions: (state) => state.roles.map(item => ({ label: item.name, value: item.id })),
+        userGroupOptions: (state) => state.userGroups.map(item => ({ label: item.name, value: item.uuid })),
+        roleOptions: (state) => state.roles.map(item => ({ label: item.name, value: item.uuid })),
     },
 
     actions: {

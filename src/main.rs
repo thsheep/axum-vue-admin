@@ -1,6 +1,3 @@
-extern crate alloc;
-extern crate core;
-
 use core::str::FromStr;
 use std::fs;
 use dotenv::dotenv;

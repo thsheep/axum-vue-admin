@@ -14,3 +14,4 @@ pub mod user_roles;
 pub mod users;
 pub mod cedar_policy_set;
 pub mod cedar_schema;
+pub mod template_links;

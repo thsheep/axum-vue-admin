@@ -1,7 +1,7 @@
 // 角色管理路由
 
 use crate::config::state::AppState;
-use crate::entity::{group_roles, roles, user_group_members, user_roles};
+use crate::entity::{group_roles, roles, user_group_members, user_roles, users};
 use crate::errors::app_error::AppError;
 use crate::schemas::auth::CurrentUser;
 use crate::schemas::cedar_policy::CedarContext;
@@ -17,7 +17,8 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tracing::debug;
-use crate::schemas::user::UserID;
+use uuid::Uuid;
+use crate::schemas::user::UserUUID;
 
 #[derive(Clone)]
 pub struct RoleService {
@@ -39,47 +40,44 @@ impl RoleService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::ViewRole,
                 ResourceType::Role(None),
             )
             .await?;
 
+        let requested_fields: HashSet<String> = params
+            .fields
+            .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_else(|| {
+                [
+                    "role_id",
+                    "role_uuid",
+                    "role_name",
+                    "description",
+                    "created_at"
+                ]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            });
+
         // 构建基础查询
-        let mut base_query = roles::Entity::find();
+        let mut select = roles::Entity::find();
 
         // 应用通用过滤条件
         if let Some(role_name) = &params.name {
-            base_query = base_query.filter(roles::Column::RoleName.contains(role_name));
+            select = select.filter(roles::Column::RoleName.contains(role_name));
         }
-
-        // 根据 fields 参数决定查询策略
-        match params.fields.as_ref() {
-            Some(fields) => {
-                self.list_roles_with_fields(base_query, fields, &params).await
-            }
-            None => {
-                self.list_roles_full(base_query, &params).await
-            }
-        }
-    }
-
-
-    // 处理指定字段查询
-    async fn list_roles_with_fields(
-        &self,
-        base_query: Select<roles::Entity>,
-        fields: &str,
-        params: &QueryParams,
-    ) -> Result<(Vec<Value>, u64), AppError> {
-        let requested_fields: Vec<&str> = fields.split(',').map(|s| s.trim()).collect();
-        let mut select = base_query.select_only();
 
         // 动态添加字段
         for field in &requested_fields {
-            select = match *field {
+            select = match field.as_str() {
                 "id" => select.column_as(roles::Column::RoleId, "id"),
+                "role_id" => select.column_as(roles::Column::RoleId, "id"),
+                "uuid" => select.column_as(roles::Column::RoleUuid, "uuid"),
+                "role_uuid" => select.column_as(roles::Column::RoleUuid, "uuid"),
                 "name" => select.column_as(roles::Column::RoleName, "name"),
                 "description" => select.column_as(roles::Column::Description, "description"),
                 "created_at" => select.column_as(roles::Column::CreatedAt, "created_at"),
@@ -103,50 +101,32 @@ impl RoleService {
         Ok((response, total))
     }
 
-    // 处理完整查询
-    async fn list_roles_full(
-        &self,
-        base_query: Select<roles::Entity>,
-        params: &QueryParams,
-    ) -> Result<(Vec<Value>, u64), AppError> {
-        let paginator = base_query.paginate(&self.app_state.db, params.page_size);
-        let total = paginator.num_items().await?;
-        let results = paginator.fetch_page(params.page - 1).await?;
-
-        let response = results
-            .into_iter()
-            .map(|role| serde_json::to_value(RoleResponse::from(role)))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok((response, total))
-    }
-
-
 
     pub async fn get_role(&self,
                           current_user: CurrentUser,
                           context: CedarContext,
-                          role_id: i32) -> Result<RoleResponse, AppError> {
+                          role_uuid: String) -> Result<RoleResponse, AppError> {
 
         let schema = self.app_state.auth_service.get_schema_copy().await;
-        let es = get_role_entities(&self.app_state.db, &vec![role_id], &schema).await?;
+        let es = get_role_entities(&self.app_state.db, &vec![role_uuid.clone()], &schema).await?;
 
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::ViewRole,
-                ResourceType::Role(Some(role_id)),
+                ResourceType::Role(Some(role_uuid.clone())),
                 es
             )
             .await?;
 
-        let role = roles::Entity::find_by_id(role_id)
-            .column_as(roles::Column::RoleId, "id")
+        let role = roles::Entity::find()
+            .column_as(roles::Column::RoleUuid, "id")
             .column_as(roles::Column::RoleName, "name")
             .column(roles::Column::Description)
             .column(roles::Column::CreatedAt)
+            .filter(roles::Column::RoleUuid.eq(role_uuid))
             .into_model::<RoleResponse>()
             .one(&self.app_state.db)
             .await?
@@ -162,7 +142,7 @@ impl RoleService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::CreateRole,
                 ResourceType::Role(None),
@@ -179,6 +159,7 @@ impl RoleService {
         }
 
         let role = roles::ActiveModel {
+            role_uuid: Set(Uuid::new_v4().to_string()),
             role_name: Set(dto.name),
             description: Set(Some(dto.description)),
             ..Default::default()
@@ -191,24 +172,25 @@ impl RoleService {
     pub async fn update_role(&self,
                              current_user: CurrentUser,
                              context: CedarContext,
-                             role_id: i32,
+                             role_uuid: String,
                              dto: UpdateRoleDto) -> Result<RoleResponse, AppError> {
 
         let schema = self.app_state.auth_service.get_schema_copy().await;
-        let es = get_role_entities(&self.app_state.db, &vec![role_id], &schema).await?;
+        let es = get_role_entities(&self.app_state.db, &vec![role_uuid.clone()], &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::UpdateRole,
-                ResourceType::Role(Some(role_id)),
+                ResourceType::Role(Some(role_uuid.clone())),
                 es
             )
             .await?;
 
 
-        let mut role: roles::ActiveModel = roles::Entity::find_by_id(role_id)
+        let mut role: roles::ActiveModel = roles::Entity::find()
+            .filter(roles::Column::RoleUuid.eq(&role_uuid))
             .one(&self.app_state.db)
             .await?
             .ok_or(not_found!("Role Not Found".to_string()))?
@@ -229,57 +211,49 @@ impl RoleService {
     pub async fn delete_role(&self,
                              current_user: CurrentUser,
                              context: CedarContext,
-                             role_id: i32) -> Result<(), AppError> {
+                             role_uuid: String) -> Result<(), AppError> {
 
         let schema = self.app_state.auth_service.get_schema_copy().await;
-        let es = get_role_entities(&self.app_state.db, &vec![role_id], &schema).await?;
+        let es = get_role_entities(&self.app_state.db, &vec![role_uuid.clone()], &schema).await?;
         self.app_state
             .auth_service
             .check_permission_with_entities(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::DeleteRole,
-                ResourceType::Role(Some(role_id)),
+                ResourceType::Role(Some(role_uuid.clone())),
                 es
             )
             .await?;
 
+        roles::Entity::delete_many()
+            .filter(roles::Column::RoleUuid.eq(role_uuid)).exec(&self.app_state.db).await?;
 
-        // 删除角色时，需要同时删除 user_roles 表中与该角色关联的所有记录
-        let txn = self.app_state.db.begin().await?;
-
-        roles::Entity::delete_by_id(role_id).exec(&txn).await?;
-
-
-        user_roles::Entity::delete_many()
-            .filter(user_roles::Column::RoleId.eq(role_id))
-            .exec(&txn)
-            .await?;
-
-        group_roles::Entity::delete_many()
-            .filter(group_roles::Column::RoleId.eq(role_id))
-            .exec(&txn)
-            .await?;
-
-        txn.commit().await?;
         Ok(())
     }
 }
 
 
-pub async fn get_role_models_by_user_id(db: &DatabaseConnection, user_id: UserID) -> Result<Vec<roles::Model>, AppError> {
+pub async fn get_role_models_by_user_uuid(db: &DatabaseConnection, user_uuid: UserUUID) -> Result<Vec<roles::Model>, AppError> {
+
+    let user_id_subquery = users::Entity::find()
+        .select_only()
+        .column(users::Column::UserId)
+        .filter(users::Column::UserUuid.eq(user_uuid))
+        .into_query();
+
     // --- 子查询 1: 获取直接分配给用户的角色 ID ---
     let direct_role_ids_query = user_roles::Entity::find()
         .select_only() // 只选择特定列
         .column(user_roles::Column::RoleId) // 我们只需要 role_id
-        .filter(user_roles::Column::UserId.eq(user_id));
+        .filter(user_roles::Column::UserId.in_subquery(user_id_subquery.clone()));
 
     // --- 子查询 2: 获取通过用户组继承的角色 ID ---
     // 首先，找到该用户所属的所有 group_id
     let group_ids_query = user_group_members::Entity::find()
         .select_only()
         .column(user_group_members::Column::GroupId)
-        .filter(user_group_members::Column::UserId.eq(user_id));
+        .filter(user_group_members::Column::UserId.in_subquery(user_id_subquery));
 
     // 然后，基于上面的 group_id 找到所有关联的 role_id
     let group_role_ids_query = group_roles::Entity::find()
@@ -303,14 +277,14 @@ pub async fn get_role_models_by_user_id(db: &DatabaseConnection, user_id: UserID
 }
 
 
-pub async fn get_role_entities(db: &DatabaseConnection, role_ids: &Vec<i32>, schema: &Schema) -> Result<Entities, AppError> {
+pub async fn get_role_entities(db: &DatabaseConnection, role_ids: &Vec<String>, schema: &Schema) -> Result<Entities, AppError> {
     let roles = roles::Entity::find()
-        .filter(roles::Column::RoleId.is_in(role_ids.to_vec()))
+        .filter(roles::Column::RoleUuid.is_in(role_ids.to_vec()))
         .all(db)
         .await?;
     let mut entities = HashSet::new();
     for role in roles {
-        let role_eid = EntityId::from_str(&role.role_id.to_string())?;
+        let role_eid = EntityId::from_str(&role.role_uuid.to_string())?;
         let role_typename = EntityTypeName::from_str(ENTITY_TYPE_ROLE)?;
         let role_e_uid = EntityUid::from_type_name_and_id(role_typename, role_eid);
 

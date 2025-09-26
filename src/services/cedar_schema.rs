@@ -26,7 +26,7 @@ impl CedarSchemaService {
         self.app_state
             .auth_service
             .check_permission(
-                current_user.user_id,
+                &current_user.uuid,
                 context,
                 AuthAction::ViewPolicy,
                 ResourceType::Policy(None),
@@ -38,7 +38,7 @@ impl CedarSchemaService {
             .ok_or(bad_request!("Not found Schema"))?;
 
         let response = CedarSchemaResponse{
-            id: model.schema_id,
+            uuid: model.schema_uuid,
             schema: model.schema,
             description: model.description,
             created_at: model.created_at,
@@ -58,7 +58,7 @@ impl CedarSchemaService {
         self.app_state
         .auth_service
         .check_permission(
-            current_user.user_id,
+            &current_user.uuid,
             context,
             AuthAction::UpdatePolicy,
             ResourceType::Policy(None),
@@ -76,7 +76,7 @@ impl CedarSchemaService {
         let new_model = schema.update(&self.app_state.db).await?;
 
         let response = CedarSchemaResponse{
-            id: new_model.schema_id,
+            uuid: new_model.schema_uuid,
             schema: new_model.schema,
             description: new_model.description,
             created_at: new_model.created_at,

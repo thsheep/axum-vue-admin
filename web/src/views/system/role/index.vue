@@ -92,7 +92,7 @@ const handleSave = async () => {
       await roleStore.createRole(currentItem.value)
       $message.success('创建成功')
     } else {
-      await roleStore.updateRole(currentItem.value.id, currentItem.value)
+      await roleStore.updateRole(currentItem.value.uuid, currentItem.value)
       $message.success('更新成功')
     }
     showModal.value = false
@@ -105,7 +105,7 @@ const handleSave = async () => {
 
 const handleDelete = async (row) => {
   try {
-    await roleStore.deleteRole(row.id)
+    await roleStore.deleteRole(row.uuid)
     $message.success('删除成功')
   } catch (error) {
     $message.error(`删除失败: ${error.message}`)

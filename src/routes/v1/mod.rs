@@ -18,6 +18,7 @@ mod sse;
 mod cedar_policy;
 mod cedar_schema;
 
+
 pub fn public_router(app_state: AppState) -> OpenApiRouter {
     let routes = OpenApiRouter::new()
         .nest("/auth", auth::public_routes(app_state.clone()))

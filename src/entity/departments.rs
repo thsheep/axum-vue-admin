@@ -2,20 +2,20 @@
 
 use sea_orm::entity::prelude::*;
 
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "departments")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub dept_id: i32,
+    pub dept_uuid: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
-    #[sea_orm(unique)]
     pub name: String,
     pub desc: Option<String>,
     #[sea_orm(custom_type="i8")]
     pub is_deleted: bool,
     pub order: i32,
-    #[sea_orm(unique)]
     pub parent_id: i32,
 }
 

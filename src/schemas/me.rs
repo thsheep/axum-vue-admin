@@ -11,7 +11,8 @@ pub type UiPolicies = HashSet<String>;
 
 #[derive(Default, Debug, Serialize, Deserialize, ToSchema, FromQueryResult)]
 pub struct Info {
-    pub user_id: i32,
+    #[serde(rename = "uuid")]
+    pub user_uuid: String,
     pub username: String,
     pub alias: Option<String>,
     pub email: String,

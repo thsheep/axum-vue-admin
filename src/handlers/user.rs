@@ -5,6 +5,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use clap::builder::Str;
 use validator::Validate;
 
 use crate::schemas::paginated::PaginatedApiResponse;
@@ -52,9 +53,9 @@ pub async fn list_users(
 
 #[utoipa::path(
     get,
-    path = "/{user_id}",  // 路径中的 {id} 会被识别为参数
+    path = "/{user_uuid}",  // 路径中的 {id} 会被识别为参数
     params(
-        ("user_id" = u64, Path, description = "用户唯一ID", example = 42)
+        ("user_uuid" = String, Path, description = "用户唯一UUID")
     ),
     responses(
         (status = 200, description = "用户详情", body = UserResponse),
@@ -66,7 +67,7 @@ pub async fn list_users(
     ),
 )]
 pub async fn get_user(
-    Path(user_id): Path<i32>,
+    Path(user_uuid): Path<String>,
     State(service): State<UserService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -74,7 +75,7 @@ pub async fn get_user(
     let user = service.get_user(
         current_user,
         context,
-        user_id).await?;
+        user_uuid).await?;
     Ok(ApiResponse::success(user, StatusCode::OK))
 }
 
@@ -105,10 +106,10 @@ pub async fn create_user(
 
 #[utoipa::path(
     put,
-    path = "/{user_id}",
+    path = "/{user_uuid}",
     request_body=UpdateUserDto,
     params(
-        ("user_id" = u64, Path, description = "用户唯一ID", example = 42)
+        ("user_uuid" = String, Path, description = "用户唯一UUID")
     ),
     responses(  (status=200, body=UserResponse, description="更新成功"),
                 (status=404, description="用户不存在"),),
@@ -118,7 +119,7 @@ pub async fn create_user(
     ),
 )]
 pub async fn update_user(
-    Path(user_id): Path<i32>,
+    Path(user_uuid): Path<String>,
     State(service): State<UserService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -128,15 +129,15 @@ pub async fn update_user(
     let user = service.update_user(
         current_user,
         context,
-        user_id, dto).await?;
+        user_uuid, dto).await?;
     Ok(ApiResponse::success(user, StatusCode::OK))
 }
 
 #[utoipa::path(
     delete,
-    path = "/{user_id}",
+    path = "/{user_uuid}",
     params(
-        ("user_id" = u64, Path, description = "用户唯一ID", example = 42)
+        ("user_uuid" = String, Path, description = "用户唯一UUID")
     ),
     responses(( status=200, description="删除成功"),),
     tag = USER_TAG,
@@ -145,7 +146,7 @@ pub async fn update_user(
     ),
 )]
 pub async fn delete_user(
-    Path(user_id): Path<i32>,
+    Path(user_uuid): Path<String>,
     State(service): State<UserService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -153,15 +154,15 @@ pub async fn delete_user(
     service.delete_user(
         current_user,
         context,
-        user_id).await?;
+        user_uuid).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
     get,
-    path = "/{user_id}/roles",
+    path = "/{user_uuid}/roles",
     params(
-        ("user_id" = u64, Path, description = "用户唯一ID", example = 42)
+        ("user_uuid" = String, Path, description = "用户唯一UUID")
     ),
     responses(( status=200, description="用户角色列表", body=Vec<UserRoleResponse>),),
     tag = USER_TAG,
@@ -170,7 +171,7 @@ pub async fn delete_user(
     ),
 )]
 pub async fn user_roles(
-    Path(user_id): Path<i32>,
+    Path(user_uuid): Path<String>,
     State(service): State<UserService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -178,16 +179,16 @@ pub async fn user_roles(
     let roles = service.user_roles(
         current_user,
         context,
-        user_id).await?;
+        user_uuid).await?;
     Ok(ApiResponse::success(roles, StatusCode::OK))
 }
 
 #[utoipa::path(
     post,
-    path = "/{user_id}/roles",
+    path = "/{user_uuid}/roles",
     request_body=AssignRoleDto,
     params(
-        ("user_id" = i32, Path, description = "用户唯一ID", example = 42)
+        ("user_uuid" = String, Path, description = "用户唯一UUID")
     ),
     responses(( status=201, description="分配角色成功"),),
     tag = USER_TAG,
@@ -196,7 +197,7 @@ pub async fn user_roles(
     ),
 )]
 pub async fn assign_roles(
-    Path(user_id): Path<i32>,
+    Path(user_uuid): Path<String>,
     State(service): State<UserService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -205,16 +206,16 @@ pub async fn assign_roles(
     service.assign_roles(
         current_user,
         context,
-        user_id, dto).await?;
+        user_uuid, dto).await?;
     Ok(StatusCode::CREATED)
 }
 
 #[utoipa::path(
     delete,
-    path = "/{user_id}/roles/{role_id}",
+    path = "/{user_uuid}/roles/{role_uuid}",
     params(
-        ("user_id" = i32, Path, description = "用户唯一ID", example = 42),
-        ("role_id" = i32, Path, description = "角色唯一ID", example = 42)
+        ("user_uuid" = String, Path, description = "用户唯一UUID"),
+        ("role_uuid" = String, Path, description = "角色唯一UUID")
     ),
     responses(( status=204, description="移除用户角色成功"),),
     tag = USER_TAG,
@@ -223,7 +224,7 @@ pub async fn assign_roles(
     ),
 )]
 pub async fn revoke_roles(
-    Path((user_id, role_id)): Path<(i32, i32)>,
+    Path((user_uuid, role_uuid)): Path<(String, String)>,
     State(service): State<UserService>,
     Extension(current_user): Extension<CurrentUser>,
     Extension(context): Extension<CedarContext>,
@@ -231,6 +232,7 @@ pub async fn revoke_roles(
     service.revoke_roles(
         current_user,
         context,
-        user_id, role_id).await?;
+        user_uuid,
+        role_uuid).await?;
     Ok(StatusCode::NO_CONTENT)
 }

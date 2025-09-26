@@ -72,8 +72,9 @@ const handleAdd = () => {
   showModal.value = true;
 };
 
-const handleEdit = (row) => {
-  currentItem.value = {...row};
+const handleEdit = async (row) => {
+  let data = await store.fetchPolicyByID(row.uuid)
+  currentItem.value = {...data};
   modalType.value = 'edit';
   showModal.value = true;
 };
@@ -119,7 +120,7 @@ const handleSyncPolicies = async () => {
 const columns = [
   {
     title: '注释',
-    key: 'policy_str_id',
+    key: 'annotation',
     width: 450,
     align: 'center',
     ellipsis: {tooltip: true},
@@ -132,13 +133,20 @@ const columns = [
     ellipsis: {tooltip: true},
   },
   {
+    title: '类型',
+    key: 'policy_type',
+    width: 80,
+    align: 'center',
+    ellipsis: {tooltip: true},
+  },
+  {
     title: '状态',
     key: 'is_active',
     width: 100,
     align: 'center',
     render(row) {
       return h(NSwitch,
-          {defaultValue: row.is_active, disabled: true},
+          {defaultValue: row.is_active === 1, disabled: true},
           {
             checked: () => '启用',
             unchecked: () => '禁用'
@@ -197,6 +205,17 @@ const columns = [
     },
   },
 ];
+
+const policyTypeOptions = [
+  {
+    label: "STATIC",
+    value: "STATIC"
+  },
+  {
+    label: "TEMPLATE",
+    value: "TEMPLATE"
+  }
+]
 </script>
 
 <template>
@@ -273,6 +292,12 @@ const columns = [
           <NInput
               type="textarea"
               v-model:value="currentItem.policy_text"
+          />
+        </NFormItem>
+        <NFormItem label="策略类型" path="policy_type" required>
+          <NSelect
+              :options="policyTypeOptions"
+              v-model:value="currentItem.policy_type"
           />
         </NFormItem>
         <NFormItem label="描述" path="description" required>
